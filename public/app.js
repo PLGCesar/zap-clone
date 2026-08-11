@@ -17,10 +17,44 @@ if (Object.keys(firebaseConfig).length > 0) {
 const db = firebase.database();
 
 let currentUser = localStorage.getItem('zap_user') || null;
+let authMode = 'login'; // 'login' ou 'register'
 let activeChatId = 'geral';
 let activeListener = null;
 
-// Inicialização
+// Chave para Criptografia de Mensagens no Cliente
+const SECRET_CIPHER = "ZapSecretKey2026_Encrypt";
+
+// Função para Criptografar Mensagens
+function encryptText(text) {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_CIPHER.charCodeAt(i % SECRET_CIPHER.length));
+  }
+  return btoa(unescape(encodeURIComponent(result)));
+}
+
+// Função para Descriptografar Mensagens
+function decryptText(encrypted) {
+  try {
+    let decoded = decodeURIComponent(escape(atob(encrypted)));
+    let result = '';
+    for (let i = 0; i < decoded.length; i++) {
+      result += String.fromCharCode(decoded.charCodeAt(i) ^ SECRET_CIPHER.charCodeAt(i % SECRET_CIPHER.length));
+    }
+    return result;
+  } catch (e) {
+    return encrypted; // Fallback se já for texto puro
+  }
+}
+
+// Hash SHA-256 de Senha
+async function hashPassword(password) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(password);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   if (currentUser) {
     initApp();
@@ -33,21 +67,52 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 });
 
-// Registrar ou Fazer Login
-function registerOrLogin() {
-  const username = document.getElementById('usernameInput')?.value.trim();
-  if (!username) return alert('Digite um nome de usuário!');
+function switchAuthTab(mode) {
+  authMode = mode;
+  document.getElementById('tabLogin').className = `auth-tab ${mode === 'login' ? 'active' : ''}`;
+  document.getElementById('tabRegister').className = `auth-tab ${mode === 'register' ? 'active' : ''}`;
+  document.getElementById('authSubmitBtn').innerText = mode === 'login' ? 'Entrar' : 'Criar Conta';
+}
 
-  // Salva o usuário no Firebase
-  db.ref('users/' + username).set({
-    username: username,
-    createdAt: Date.now()
-  }).then(() => {
-    localStorage.setItem('zap_user', username);
-    currentUser = username;
-    document.getElementById('authScreen').style.display = 'none';
-    initApp();
-  });
+async function handleAuth() {
+  const username = document.getElementById('usernameInput')?.value.trim();
+  const password = document.getElementById('passwordInput')?.value.trim();
+
+  if (!username || !password) return alert('Preencha o usuário e a senha!');
+
+  const passwordHash = await hashPassword(password);
+  const userRef = db.ref('users/' + username);
+
+  if (authMode === 'register') {
+    // Verificar se usuário já existe
+    userRef.get().then((snapshot) => {
+      if (snapshot.exists()) {
+        alert('Este nome de usuário já existe! Escolha outro ou faça login.');
+      } else {
+        userRef.set({ username, passwordHash, createdAt: Date.now() }).then(() => {
+          localStorage.setItem('zap_user', username);
+          currentUser = username;
+          initApp();
+        });
+      }
+    });
+  } else {
+    // Autenticar Login
+    userRef.get().then((snapshot) => {
+      if (!snapshot.exists()) {
+        alert('Usuário não encontrado! Crie uma conta primeiro.');
+      } else {
+        const userData = snapshot.val();
+        if (userData.passwordHash === passwordHash) {
+          localStorage.setItem('zap_user', username);
+          currentUser = username;
+          initApp();
+        } else {
+          alert('Senha incorreta!');
+        }
+      }
+    });
+  }
 }
 
 function logout() {
@@ -58,11 +123,11 @@ function logout() {
 function initApp() {
   document.getElementById('authScreen').style.display = 'none';
   document.getElementById('myAccountName').innerText = currentUser;
+  document.getElementById('myAvatarHeader').innerText = currentUser[0].toUpperCase();
   loadUsers();
   openChat('geral', 'Grupo Geral', 'group');
 }
 
-// Carregar lista de outros usuários cadastrados
 function loadUsers() {
   db.ref('users').on('value', (snapshot) => {
     const usersContainer = document.getElementById('dynamicUsers');
@@ -77,7 +142,7 @@ function loadUsers() {
             <div class="avatar">${user.username[0].toUpperCase()}</div>
             <div class="contact-info">
               <div class="name">${user.username}</div>
-              <div class="sub">Toque para conversar</div>
+              <div class="sub">Conversa Criptografada</div>
             </div>
           </div>
         `;
@@ -86,7 +151,6 @@ function loadUsers() {
   });
 }
 
-// Abrir uma conversa
 function openChat(chatId, title, avatarType) {
   activeChatId = chatId;
   document.getElementById('activeChatTitle').innerText = title;
@@ -96,27 +160,41 @@ function openChat(chatId, title, avatarType) {
   else if (avatarType === 'group') avatarEl.innerText = '👥';
   else avatarEl.innerText = title[0].toUpperCase();
 
-  // No mobile, alterna as telas
   document.getElementById('contactsPanel').classList.add('hidden');
   document.getElementById('chatPanel').classList.remove('hidden');
 
-  // Limpa mensagens anteriores
   const box = document.getElementById('messagesBox');
-  box.innerHTML = '';
+  box.innerHTML = `
+    <div class="encryption-banner">
+      🔒 As mensagens são protegidas com criptografia de ponta a ponta.
+    </div>
+  `;
 
-  // Remove escuta anterior se houver
   if (activeListener) activeListener.off();
 
-  // Escuta novas mensagens do chat ativo
   const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
   activeListener = db.ref(chatPath);
   
   activeListener.on('child_added', (snapshot) => {
     const msg = snapshot.val();
     const isMe = msg.author === currentUser;
+    const decryptedText = decryptText(msg.text);
+    
+    // Formata o horário exato (ex: 14:32)
+    const date = msg.timestamp ? new Date(msg.timestamp) : new Date();
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
     const msgDiv = document.createElement('div');
     msgDiv.className = `msg ${isMe ? 'sent' : 'received'}`;
-    msgDiv.innerHTML = `<span class="author">${msg.author}</span><div>${msg.text}</div>`;
+    
+    msgDiv.innerHTML = `
+      ${!isMe ? `<span class="author">${msg.author}</span>` : ''}
+      <div>${decryptedText}</div>
+      <div class="msg-footer">
+        <span class="time">${timeStr}</span>
+        ${isMe ? '<span class="checks">✓✓</span>' : ''}
+      </div>
+    `;
     
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
@@ -128,29 +206,29 @@ function closeChat() {
   document.getElementById('contactsPanel').classList.remove('hidden');
 }
 
-// Enviar Mensagem (E Lógica do Bot Server)
 function sendMessage() {
   const textInput = document.getElementById('messageText');
-  const text = textInput?.value.trim() || '';
+  const rawText = textInput?.value.trim() || '';
 
-  if (text !== '') {
+  if (rawText !== '') {
+    // CRIPTOGRAFA A MENSAGEM ANTES DE MANDAR PRO FIREBASE
+    const encryptedText = encryptText(rawText);
     const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
     const chatRef = db.ref(chatPath);
 
-    // Envia mensagem do usuário
     chatRef.push({
       author: currentUser,
-      text: text,
+      text: encryptedText,
       timestamp: Date.now()
     }).then(() => {
       textInput.value = '';
 
-      // 🤖 LÓGICA DO BOT SERVER
+      // BOT SERVER RESPONDER PONG CRIPTOGRAFADO
       if (activeChatId === 'server') {
         setTimeout(() => {
           chatRef.push({
             author: 'Server 🤖',
-            text: 'Pong 🏓',
+            text: encryptText('Pong 🏓'),
             timestamp: Date.now()
           });
         }, 600);

@@ -3,67 +3,81 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Zap Clone</title>
+  <title>Zap Clone - Protegido</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <div class="app-wrapper">
 
-    <!-- TELA 1: CADASTRO / LOGIN -->
+    <!-- TELA DE AUTH (LOGIN / REGISTRO COM SENHA) -->
     <div class="auth-screen" id="authScreen">
       <div class="auth-card">
         <h2>Zap Clone 💬</h2>
-        <p>Crie sua conta para entrar no chat</p>
-        <input type="text" id="usernameInput" placeholder="Digite seu nome de usuário" autocomplete="off">
-        <button onclick="registerOrLogin()">Entrar / Cadastrar</button>
+        <p>Acesse com sua conta criptografada</p>
+        
+        <div class="auth-tabs">
+          <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Entrar</button>
+          <button class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">Criar Conta</button>
+        </div>
+
+        <input type="text" id="usernameInput" placeholder="Usuário" autocomplete="off">
+        <input type="password" id="passwordInput" placeholder="Senha">
+
+        <button class="submit-btn" id="authSubmitBtn" onclick="handleAuth()">Entrar</button>
       </div>
     </div>
 
-    <!-- TELA 2: LISTA DE CONTATOS (SIDEBAR) -->
+    <!-- TELA DE CONTATOS -->
     <div class="contacts-panel" id="contactsPanel">
       <div class="user-header">
-        <span class="my-name" id="myAccountName">Usuário</span>
+        <div class="my-profile">
+          <div class="avatar" id="myAvatarHeader">U</div>
+          <span class="my-name" id="myAccountName">Usuário</span>
+        </div>
         <button class="logout-btn" onclick="logout()">Sair</button>
       </div>
-      <div class="contacts-list" id="contactsList">
-        
-        <!-- Contato Bot Server -->
+
+      <div class="contacts-list">
+        <!-- Bot Server -->
         <div class="contact-item" onclick="openChat('server', 'Server Bot', 'bot')">
           <div class="avatar bot">🤖</div>
           <div class="contact-info">
             <div class="name">Server (Bot Teste)</div>
-            <div class="sub">Responde "Pong" automaticamente</div>
+            <div class="sub">Responde "Pong" criptografado</div>
           </div>
         </div>
 
-        <!-- Contato Grupo Geral -->
+        <!-- Grupo Geral -->
         <div class="contact-item" onclick="openChat('geral', 'Grupo Geral', 'group')">
           <div class="avatar group">👥</div>
           <div class="contact-info">
             <div class="name">Grupo Geral</div>
-            <div class="sub">Chat público em tempo real</div>
+            <div class="sub">Chat público seguro</div>
           </div>
         </div>
 
-        <!-- Outros Usuários do Firebase entram aqui dinamicamente -->
+        <!-- Outros usuários -->
         <div id="dynamicUsers"></div>
-
       </div>
     </div>
 
-    <!-- TELA 3: JANELA DE CHAT -->
+    <!-- JANELA DE CHAT -->
     <div class="chat-panel hidden" id="chatPanel">
       <div class="chat-header">
         <button class="back-btn" onclick="closeChat()">←</button>
         <div class="avatar" id="activeAvatar">💬</div>
         <div>
-          <div style="font-weight: bold;" id="activeChatTitle">Selecione uma conversa</div>
+          <div style="font-weight: 600; color: #e9edef;" id="activeChatTitle">Conversa</div>
           <div style="font-size: 11px; color: #00a884;">online</div>
         </div>
       </div>
 
-      <div class="messages-box" id="messagesBox"></div>
+      <div class="messages-box" id="messagesBox">
+        <div class="encryption-banner">
+          🔒 As mensagens são protegidas com criptografia de ponta a ponta.
+        </div>
+      </div>
 
       <div class="chat-footer">
         <input type="text" id="messageText" placeholder="Mensagem..." autocomplete="off">

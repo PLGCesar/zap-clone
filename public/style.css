@@ -7,199 +7,148 @@
 }
 
 html, body {
-  width: 100%;
-  height: 100%;
+  width: 100%; height: 100%;
   overflow: hidden;
   background-color: #0b141a;
   color: #e9edef;
 }
 
 .app-wrapper {
-  width: 100%;
-  height: 100vh;
-  height: 100dvh;
-  display: flex;
-  max-width: 1000px;
-  margin: 0 auto;
+  width: 100%; height: 100vh; height: 100dvh;
+  display: flex; max-width: 1000px; margin: 0 auto;
   position: relative;
 }
 
-/* TELA DE AUTH / LOGIN */
+/* TELA DE AUTENTICAÇÃO (LOGIN / REGISTRO) */
 .auth-screen {
-  position: absolute;
-  top: 0; left: 0; width: 100%; height: 100%;
-  background: #0b141a;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 20px;
-  z-index: 100;
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  background: #0b141a; display: flex; flex-direction: column;
+  justify-content: center; align-items: center; padding: 20px; z-index: 100;
 }
 
 .auth-card {
-  background: #111b21;
-  padding: 30px;
-  border-radius: 12px;
-  width: 100%;
-  max-width: 360px;
-  border: 1px solid #222d34;
-  text-align: center;
+  background: #111b21; padding: 30px; border-radius: 12px;
+  width: 100%; max-width: 380px; border: 1px solid #222d34;
 }
 
-.auth-card h2 { margin-bottom: 8px; color: #00a884; }
-.auth-card p { font-size: 13px; color: #8696a0; margin-bottom: 20px; }
+.auth-card h2 { color: #00a884; text-align: center; margin-bottom: 6px; }
+.auth-card p { font-size: 13px; color: #8696a0; text-align: center; margin-bottom: 20px; }
+
+.auth-tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+.auth-tab {
+  flex: 1; padding: 10px; background: #202c33; border: none;
+  color: #8696a0; border-radius: 8px; font-weight: bold; cursor: pointer;
+}
+.auth-tab.active { background: #00a884; color: white; }
 
 .auth-card input {
-  width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #2a3942;
-  background: #202c33;
-  color: #e9edef;
-  font-size: 16px;
-  margin-bottom: 15px;
-  outline: none;
+  width: 100%; padding: 12px; border-radius: 8px;
+  border: 1px solid #2a3942; background: #202c33;
+  color: #e9edef; font-size: 15px; margin-bottom: 12px; outline: none;
 }
 
-.auth-card button {
-  width: 100%;
-  padding: 12px;
-  border-radius: 8px;
-  border: none;
-  background: #00a884;
-  color: white;
-  font-weight: bold;
-  font-size: 15px;
-  cursor: pointer;
+.auth-card button.submit-btn {
+  width: 100%; padding: 12px; border-radius: 8px; border: none;
+  background: #00a884; color: white; font-weight: bold; font-size: 15px; cursor: pointer;
 }
 
-/* PAINEL DE CONTATOS (SIDEBAR) */
+/* LISTA DE CONTATOS */
 .contacts-panel {
-  width: 100%;
-  height: 100%;
-  background: #111b21;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid #222d34;
+  width: 100%; height: 100%; background: #111b21;
+  display: flex; flex-direction: column; border-right: 1px solid #222d34;
 }
 
 .user-header {
-  background: #202c33;
-  padding: 12px 16px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+  background: #202c33; padding: 12px 16px;
+  display: flex; justify-content: space-between; align-items: center;
 }
 
-.user-header .my-name { font-weight: 600; color: #00a884; }
-.logout-btn { background: none; border: none; color: #ea4335; cursor: pointer; font-size: 12px; }
+.my-profile { display: flex; align-items: center; gap: 10px; }
+.my-name { font-weight: 600; color: #e9edef; font-size: 15px; }
+.logout-btn { background: none; border: none; color: #ea4335; cursor: pointer; font-size: 13px; font-weight: 500; }
 
-.contacts-list {
-  flex: 1;
-  overflow-y: auto;
-}
+.contacts-list { flex: 1; overflow-y: auto; }
 
 .contact-item {
-  padding: 14px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid #1f2c34;
-  cursor: pointer;
+  padding: 12px 16px; display: flex; align-items: center; gap: 12px;
+  border-bottom: 1px solid #1f2c34; cursor: pointer;
 }
-
 .contact-item:active, .contact-item.active { background: #222d34; }
 
 .avatar {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: #6b7c85;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  color: white;
-  flex-shrink: 0;
+  width: 44px; height: 44px; border-radius: 50%; background: #6b7c85;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: bold; color: white; flex-shrink: 0; font-size: 18px;
 }
-
 .avatar.bot { background: #00a884; }
 .avatar.group { background: #007a65; }
 
 .contact-info { flex: 1; }
-.contact-info .name { font-size: 15px; font-weight: 500; }
-.contact-info .sub { font-size: 12px; color: #8696a0; margin-top: 2px; }
+.contact-info .name { font-size: 15px; font-weight: 500; color: #e9edef; }
+.contact-info .sub { font-size: 13px; color: #8696a0; margin-top: 2px; }
 
-/* PAINEL DE CHAT */
+/* TELA DE CHAT */
 .chat-panel {
-  width: 100%;
-  height: 100%;
-  background: #0b141a;
-  display: flex;
-  flex-direction: column;
+  width: 100%; height: 100%; background: #0b141a;
+  display: flex; flex-direction: column;
 }
 
 .chat-header {
-  background: #202c33;
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+  background: #202c33; padding: 10px 16px;
+  display: flex; align-items: center; gap: 12px; border-bottom: 1px solid #222d34;
 }
 
-.back-btn {
-  background: none; border: none; color: #00a884;
-  font-size: 20px; font-weight: bold; cursor: pointer;
-}
+.back-btn { background: none; border: none; color: #00a884; font-size: 22px; cursor: pointer; }
 
 .messages-box {
-  flex: 1;
-  padding: 14px;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex: 1; padding: 14px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 8px;
+  background-image: radial-gradient(#111b21 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+/* BANNER DE CRIPTOGRAFIA DA CONVERSA */
+.encryption-banner {
+  background: #182229; color: #ffd279; font-size: 11px;
+  padding: 8px 12px; border-radius: 8px; text-align: center;
+  margin: 0 auto 12px auto; max-width: 85%; border: 1px solid #222d34;
+  display: flex; align-items: center; gap: 6px; justify-content: center;
 }
 
 .msg {
-  max-width: 80%;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 15px;
-  word-break: break-word;
+  max-width: 80%; padding: 8px 12px; border-radius: 8px; font-size: 14.5px;
+  word-break: break-word; position: relative; box-shadow: 0 1px 0.5px rgba(0,0,0,0.13);
 }
 
 .msg.sent { background: #005c4b; align-self: flex-end; border-top-right-radius: 0; }
 .msg.received { background: #202c33; align-self: flex-start; border-top-left-radius: 0; }
-.msg .author { font-size: 11px; font-weight: bold; color: #53bdeb; margin-bottom: 2px; display: block; }
 
-.chat-footer {
-  background: #202c33;
-  padding: 8px 12px;
-  display: flex;
-  gap: 8px;
+.msg .author { font-size: 11px; font-weight: 600; color: #53bdeb; margin-bottom: 3px; display: block; }
+
+.msg-footer {
+  display: flex; align-items: center; justify-content: flex-end;
+  gap: 4px; margin-top: 2px; float: right; margin-left: 10px;
 }
+.msg .time { font-size: 10px; color: #8696a0; }
+.msg.sent .time { color: #8696a0; }
+.msg .checks { font-size: 13px; color: #53bdeb; font-weight: bold; }
 
+.chat-footer { background: #202c33; padding: 8px 12px; display: flex; gap: 8px; align-items: center; }
 .chat-footer input {
-  flex: 1; padding: 12px 16px; background: #2a3942;
-  border: none; color: white; border-radius: 20px; font-size: 16px; outline: none;
+  flex: 1; padding: 12px 16px; background: #2a3942; border: none;
+  color: white; border-radius: 20px; font-size: 16px; outline: none;
 }
-
 .chat-footer button {
-  background: #00a884; color: white; border: none;
-  width: 44px; height: 44px; border-radius: 50%;
-  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: #00a884; color: white; border: none; width: 44px; height: 44px;
+  border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;
 }
 
-/* RESPONSIVIDADE MOBILE */
 @media (max-width: 599px) {
-  .chat-panel.hidden { display: none; }
-  .contacts-panel.hidden { display: none; }
+  .chat-panel.hidden, .contacts-panel.hidden { display: none; }
 }
 
 @media (min-width: 600px) {
-  .contacts-panel { width: 350px; }
+  .contacts-panel { width: 360px; }
   .chat-panel { flex: 1; }
   .back-btn { display: none; }
   .contacts-panel.hidden, .chat-panel.hidden { display: flex !important; }

@@ -30,6 +30,13 @@ let isRecording = false;
 let recordTimerInterval = null;
 let recordSeconds = 0;
 
+function formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
 function censorPhone(phone) {
   if (!phone) return 'Telefone não informado';
   if (phone.length < 8) return '****';
@@ -157,7 +164,8 @@ async function handleAuth() {
             displayName: 'Root Admin 👑',
             phone: '+00 00 00000-0000',
             avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
-            isAdmin: true
+            isAdmin: true,
+            filePermission: true
           });
         }
       });
@@ -187,6 +195,7 @@ async function handleAuth() {
           passwordHash: passwordHash,
           phone: autoPhone,
           avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(finalDisplayName)}&background=00a884&color=fff`,
+          filePermission: false,
           createdAt: Date.now()
         };
 
@@ -270,6 +279,7 @@ function openAdminUsersModal() {
       const shownName = u.displayName || u.username;
       const avatarUrl = u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shownName)}&background=00a884&color=fff`;
       const censored = censorPhone(u.phone);
+      const isFilePermActive = u.filePermission ? true : false;
 
       container.innerHTML += `
         <div class="admin-user-item">
@@ -278,6 +288,10 @@ function openAdminUsersModal() {
             <div class="disp-name">${shownName}</div>
             <div class="user-name">@${u.username}</div>
             <div class="user-phone">📞 ${censored}</div>
+            ${u.username !== 'root' ? `
+              <button class="file-perm-btn ${isFilePermActive ? 'active' : ''}" onclick="toggleFilePermission('${u.username}', ${!isFilePermActive})">
+                📁 ${isFilePermActive ? 'Permissão de Arquivo: Ativa ✓' : 'Conceder Permissão de Arquivo'}
+              </button>` : ''}
           </div>
           ${u.username !== 'root' ? `
             <button class="delete-user-btn" title="Apagar Conta" onclick="deleteAccount('${u.username}')">
@@ -286,6 +300,13 @@ function openAdminUsersModal() {
         </div>
       `;
     });
+  });
+}
+
+function toggleFilePermission(targetUsername, status) {
+  if (currentUser !== 'root') return;
+  db.ref('users/' + targetUsername).update({ filePermission: status }).then(() => {
+    openAdminUsersModal();
   });
 }
 
@@ -358,7 +379,8 @@ function wipeAllSystemData() {
         displayName: 'Root Admin 👑',
         phone: '+00 00 00000-0000',
         avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
-        isAdmin: true
+        isAdmin: true,
+        filePermission: true
       });
       location.reload();
     });
@@ -445,12 +467,11 @@ function filterContacts() {
   });
 }
 
-// PLAYER DE ÁUDIO CUSTOMIZADO ESTILO WHATSAPP
+// PLAYER DE ÁUDIO
 function toggleVoicePlay(audioId, btn) {
   const audio = document.getElementById(audioId);
   if (!audio) return;
 
-  // Pausa qualquer outro áudio rodando na tela
   document.querySelectorAll('audio').forEach(a => {
     if (a.id !== audioId) {
       a.pause();
@@ -561,12 +582,34 @@ function openChat(chatId, title, avatarType, avatarUrl) {
     msgDiv.className = `msg ${isMe ? 'sent' : 'received'}`;
 
     let contentHtml = '';
+    
+    // RENDERIZAÇÃO DE IMAGEM
     if (msg.image) {
       const decryptedImg = decryptText(msg.image);
       contentHtml += `<img class="msg-img" src="${decryptedImg}">`;
     }
     
-    // RENDERIZAÇÃO DO PLAYER DE ÁUDIO CUSTOMIZADO DO WHATSAPP
+    // RENDERIZAÇÃO DE DOCUMENTO / ARQUIVO
+    if (msg.file) {
+      const decryptedName = decryptText(msg.file.name);
+      const decryptedSize = decryptText(msg.file.size);
+      const decryptedData = decryptText(msg.file.data);
+
+      contentHtml += `
+        <div class="file-doc-box">
+          <div class="file-doc-icon">📄</div>
+          <div class="file-doc-info">
+            <div class="file-doc-name">${decryptedName}</div>
+            <div class="file-doc-size">${decryptedSize}</div>
+          </div>
+          <a class="file-doc-download" href="${decryptedData}" download="${decryptedName}" target="_blank" title="Baixar Arquivo">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+          </a>
+        </div>
+      `;
+    }
+
+    // RENDERIZAÇÃO DE ÁUDIO
     if (msg.audio) {
       const decryptedAudio = decryptText(msg.audio);
       const uniqueAudId = 'aud_' + Math.random().toString(36).substr(2, 9);
@@ -640,7 +683,7 @@ async function toggleAudioRecording() {
         const reader = new FileReader();
         reader.onloadend = () => {
           const base64Audio = reader.result;
-          dispatchMessage('', null, base64Audio);
+          dispatchMessage('', null, base64Audio, null);
         };
         reader.readAsDataURL(audioBlob);
         stream.getTracks().forEach(track => track.stop());
@@ -671,12 +714,57 @@ async function toggleAudioRecording() {
   }
 }
 
+// FUNÇÃO DE ENVIAR ARQUIVO / DOCUMENTO
+function sendFileInChat(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+
+  const isExempt = (currentUser === 'root' || userData?.filePermission === true);
+
+  // 1. Checagem de Tamanho (500KB)
+  if (!isExempt && file.size > 500 * 1024) {
+    alert("⚠️ Arquivo muito grande! O limite para usuários padrão é 500KB. Peça permissão ao usuário root para enviar arquivos maiores.");
+    event.target.value = '';
+    return;
+  }
+
+  // 2. Checagem de Intervalo de Tempo (3 Minutos)
+  const lastFileTime = parseInt(localStorage.getItem('last_file_send_time') || '0', 10);
+  const now = Date.now();
+  const threeMinutes = 3 * 60 * 1000;
+
+  if (!isExempt && (now - lastFileTime < threeMinutes)) {
+    const remainingSecs = Math.ceil((threeMinutes - (now - lastFileTime)) / 1000);
+    const mins = Math.floor(remainingSecs / 60);
+    const secs = remainingSecs % 60;
+    alert(`⏱️ Por favor, aguarde ${mins}m ${secs}s para enviar outro arquivo.`);
+    event.target.value = '';
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const fileBase64 = e.target.result;
+    dispatchMessage('', null, null, {
+      name: file.name,
+      size: formatBytes(file.size),
+      data: fileBase64
+    });
+
+    if (!isExempt) {
+      localStorage.setItem('last_file_send_time', now.toString());
+    }
+    event.target.value = '';
+  };
+  reader.readAsDataURL(file);
+}
+
 function sendMessage() {
   const textInput = document.getElementById('messageText');
   const rawText = textInput?.value.trim() || '';
 
   if (rawText !== '') {
-    dispatchMessage(rawText, null, null);
+    dispatchMessage(rawText, null, null, null);
     textInput.value = '';
   }
 }
@@ -685,12 +773,12 @@ function sendPhotoInChat(event) {
   const file = event.target.files[0];
   if (file) {
     compressImage(file, 600, (base64Img) => {
-      dispatchMessage('', base64Img, null);
+      dispatchMessage('', base64Img, null, null);
     });
   }
 }
 
-function dispatchMessage(text, imageBase64, audioBase64) {
+function dispatchMessage(text, imageBase64, audioBase64, fileObj) {
   const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
   const chatRef = db.ref(chatPath);
 
@@ -705,6 +793,13 @@ function dispatchMessage(text, imageBase64, audioBase64) {
 
   if (imageBase64) payload.image = encryptText(imageBase64);
   if (audioBase64) payload.audio = encryptText(audioBase64);
+  if (fileObj) {
+    payload.file = {
+      name: encryptText(fileObj.name),
+      size: encryptText(fileObj.size),
+      data: encryptText(fileObj.data)
+    };
+  }
 
   chatRef.push(payload).then(() => {
     if (activeChatId === 'server') {

@@ -102,11 +102,19 @@
       </div>
 
       <div class="chat-footer">
+        <!-- Ícone Anexo de Documento / Arquivo -->
+        <button class="attach-btn" onclick="document.getElementById('chatDocFileInput').click()" title="Enviar Documento/Arquivo">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 015 0v10.5c0 .83-.67 1.5-1.5 1.5s-1.5-.67-1.5-1.5V6H9v9.5a3 3 0 006 0V5c0-2.21-1.79-4-4-4s-4 1.79-4 4v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"/></svg>
+        </button>
+        <input type="file" id="chatDocFileInput" style="display:none;" onchange="sendFileInChat(event)">
+
+        <!-- Ícone Câmera Foto -->
         <button class="attach-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Enviar Foto">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 15c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm9-9h-3.17L16 4H8L6.17 6H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 14H3V8h4.05l1.83-2h6.24l1.83 2H21v12z"/></svg>
         </button>
         <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="sendPhotoInChat(event)">
 
+        <!-- Ícone Microfone Áudio -->
         <button class="attach-btn" id="micBtn" onclick="toggleAudioRecording()" title="Gravar Áudio">
           <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
         </button>
@@ -161,7 +169,7 @@
 
         <button class="modal-btn" onclick="saveSettings()">Salvar Alterações</button>
 
-        <!-- FERRAMENTAS EXCLUSIVAS DO ROOT -->
+        <!-- FERRAMENTAS ROOT -->
         <div id="rootBotAvatarSection" style="display:none; margin-top:16px; border-top:1px solid #2a3942; padding-top:12px;">
           <label style="color:#00a884; font-weight:bold;">🤖 Mudar Foto do Server Bot (Exclusivo Root):</label>
           <button style="background:#202c33; color:#00a884; border:1px solid #00a884; padding:8px; width:100%; border-radius:6px; margin-top:6px; cursor:pointer;" onclick="document.getElementById('botAvatarFileInput').click()">Selecionar Foto do Bot</button>
@@ -178,7 +186,7 @@
     </div>
   </div>
 
-  <!-- MODAL ADMIN: LISTA DE TODOS OS USUÁRIOS DO SISTEMA -->
+  <!-- MODAL ADMIN USUÁRIOS -->
   <div class="modal-overlay hidden" id="adminUsersModal">
     <div class="modal-card" style="max-width: 460px;">
       <div class="modal-header">

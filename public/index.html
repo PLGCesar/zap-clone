@@ -2,19 +2,34 @@
 <html lang="pt-br">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Zap Clone</title>
-  <style>
-    body { font-family: sans-serif; background: #e5ddd5; margin: 20px; }
-    #box { background: white; height: 300px; overflow-y: scroll; padding: 10px; border-radius: 8px; margin-bottom: 10px; }
-    input, button { padding: 10px; }
-  </style>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h2>Zap Clone 💬</h2>
-  <input type="text" id="username" placeholder="Seu nome" value="User1"><br><br>
-  <div id="box"></div>
-  <input type="text" id="messageText" placeholder="Mensagem...">
-  <button onclick="sendMessage()">Enviar</button>
+
+  <div class="chat-container">
+    <div class="header">
+      <div class="header-info">
+        <h2>Zap Clone 💬</h2>
+        <span class="status">● online em tempo real</span>
+      </div>
+      <div class="user-input-group">
+        <input type="text" id="username" placeholder="Seu nome" value="User1">
+      </div>
+    </div>
+
+    <div class="messages" id="messagesBox"></div>
+
+    <div class="footer">
+      <input type="text" id="messageText" placeholder="Mensagem..." autocomplete="off">
+      <button onclick="sendMessage()" id="sendBtn">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+        </svg>
+      </button>
+    </div>
+  </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>

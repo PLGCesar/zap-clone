@@ -22,16 +22,29 @@ let authMode = 'login';
 let activeChatId = 'geral';
 let activeListener = null;
 let pendingAvatarBase64 = null;
+let pendingGroupAvatarBase64 = null;
 let botAvatarUrl = 'https://ui-avatars.com/api/?name=Bot&background=00a884&color=fff';
 
 let selectedMsgData = null;
 let activeReplyData = null;
+let activeGroupData = null;
 
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let recordTimerInterval = null;
 let recordSeconds = 0;
+
+// FUNÇÃO PARA ENVIAR E-MAIL INTERNO DO ZAP
+function sendZapEmail(recipientUsername, subject, bodyText) {
+  db.ref(`inbox/${recipientUsername}`).push({
+    sender: 'Sistema Zap 📬',
+    subject: subject,
+    body: bodyText,
+    timestamp: Date.now(),
+    read: false
+  });
+}
 
 function censorPhone(phone) {
   if (!phone) return 'Telefone não informado';
@@ -234,6 +247,9 @@ function initApp() {
     document.getElementById('rootBotAvatarSection').style.display = 'block';
   }
 
+  // Escutar e-mails internos do usuário para atualizar o badge
+  listenInbox();
+
   db.ref('bot_settings/avatar').on('value', (snap) => {
     if (snap.exists()) {
       botAvatarUrl = snap.val();
@@ -257,7 +273,203 @@ function initApp() {
   });
 
   loadMyPrivateContacts();
+  loadMyGroups();
   openChat('geral', 'Grupo Geral', 'group', '');
+}
+
+// CAIXA DE ENTRADA DE E-MAILS INTERNOS
+function listenInbox() {
+  db.ref(`inbox/${currentUser}`).on('value', (snapshot) => {
+    const badge = document.getElementById('inboxUnreadBadge');
+    const container = document.getElementById('inboxEmailsContainer');
+    if (!container) return;
+
+    let unreadCount = 0;
+    container.innerHTML = '';
+
+    if (!snapshot.exists()) {
+      container.innerHTML = '<p style="font-size:13px; color:#8696a0; text-align:center;">Nenhum e-mail interno recebido.</p>';
+      if (badge) badge.style.display = 'none';
+      return;
+    }
+
+    snapshot.forEach((child) => {
+      const mail = child.val();
+      if (!mail.read) unreadCount++;
+
+      const d = mail.timestamp ? new Date(mail.timestamp) : new Date();
+      const dateStr = d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      container.innerHTML = `
+        <div class="email-item">
+          <div class="email-sender">${mail.sender}</div>
+          <div class="email-subject">${mail.subject}</div>
+          <div class="email-body">${mail.body}</div>
+          <div class="email-date">${dateStr}</div>
+        </div>
+      ` + container.innerHTML;
+    });
+
+    if (badge) {
+      if (unreadCount > 0) {
+        badge.innerText = unreadCount;
+        badge.style.display = 'inline-block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+  });
+}
+
+// CRIAR GRUPO SANDBOX
+function previewGroupPhoto(e) {
+  const file = e.target.files[0];
+  if (file) {
+    compressImage(file, 200, (base64) => {
+      pendingGroupAvatarBase64 = base64;
+      document.getElementById('createGroupAvatarPreview').src = base64;
+    });
+  }
+}
+
+function submitCreateGroup() {
+  const groupName = document.getElementById('createGroupNameInput')?.value.trim();
+  if (!groupName) return showNotice('createGroupNotice', 'Digite o nome do grupo!', 'error');
+
+  const groupId = 'group_' + Date.now();
+  const avatarUrl = pendingGroupAvatarBase64 || `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=007a65&color=fff`;
+
+  const groupData = {
+    id: groupId,
+    name: groupName,
+    avatar: avatarUrl,
+    owner: currentUser,
+    createdAt: Date.now(),
+    members: {
+      [currentUser]: { username: currentUser, role: 'Dono 👑' }
+    }
+  };
+
+  db.ref(`groups/${groupId}`).set(groupData);
+  db.ref(`my_groups/${currentUser}/${groupId}`).set(true);
+
+  showNotice('createGroupNotice', 'Grupo criado com sucesso!', 'success');
+  setTimeout(() => {
+    closeModal('createGroupModal');
+    document.getElementById('createGroupNameInput').value = '';
+    openChat(groupId, groupName, 'group', avatarUrl);
+  }, 1000);
+}
+
+function loadMyGroups() {
+  db.ref(`my_groups/${currentUser}`).on('value', (snapshot) => {
+    const container = document.getElementById('myGroupsList');
+    if (!container) return;
+    container.innerHTML = '';
+
+    snapshot.forEach((child) => {
+      const gId = child.key;
+      db.ref(`groups/${gId}`).get().then((gSnap) => {
+        if (gSnap.exists()) {
+          const g = gSnap.val();
+          container.innerHTML += `
+            <div class="contact-item contact-entry" data-name="${g.name.toLowerCase()}" onclick="openChat('${g.id}', '${g.name}', 'group', '${g.avatar}')">
+              <img class="contact-avatar-img group" src="${g.avatar}">
+              <div class="contact-info">
+                <div class="name">${g.name}</div>
+                <div class="sub">Grupo Sandbox • ${Object.keys(g.members || {}).length} membros</div>
+              </div>
+            </div>
+          `;
+        }
+      });
+    });
+  });
+}
+
+function renderGroupMembersModal() {
+  if (!activeChatId.startsWith('group_')) return;
+  const container = document.getElementById('groupMembersListContainer');
+  if (!container) return;
+
+  db.ref(`groups/${activeChatId}`).get().then((snap) => {
+    if (!snap.exists()) return;
+    activeGroupData = snap.val();
+    container.innerHTML = '';
+
+    const myRole = activeGroupData.members?.[currentUser]?.role || '';
+    const isOwnerOrAdmin = activeGroupData.owner === currentUser || myRole.includes('Admin') || myRole.includes('Dono');
+
+    document.getElementById('groupAddMemberBtn').style.display = isOwnerOrAdmin ? 'inline-block' : 'none';
+
+    Object.values(activeGroupData.members || {}).forEach((m) => {
+      db.ref(`users/${m.username}`).get().then((uSnap) => {
+        const u = uSnap.val() || {};
+        const shownName = u.displayName || m.username;
+        const avatarUrl = u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shownName)}&background=00a884&color=fff`;
+
+        const canManage = isOwnerOrAdmin && m.username !== currentUser;
+
+        container.innerHTML += `
+          <div class="group-member-item">
+            <img class="group-member-avatar" src="${avatarUrl}">
+            <div class="group-member-info">
+              <div class="m-name">${shownName}</div>
+              <div class="m-role">${m.role}</div>
+            </div>
+            ${canManage ? `
+              <button class="member-action-btn" onclick="changeGroupMemberRole('${m.username}')">Cargo</button>
+              <button class="member-action-btn ban" onclick="kickGroupMember('${m.username}')">Banir</button>
+            ` : ''}
+          </div>
+        `;
+      });
+    });
+  });
+}
+
+function submitAddMemberToGroup() {
+  if (!activeChatId.startsWith('group_')) return;
+  const usernameInput = document.getElementById('addMemberUsernameInput')?.value.trim();
+  if (!usernameInput) return showNotice('addMemberNotice', 'Digite o nome do usuário!', 'error');
+
+  db.ref(`users/${usernameInput}`).get().then((snap) => {
+    if (!snap.exists()) {
+      showNotice('addMemberNotice', 'Usuário não encontrado!', 'error');
+    } else {
+      db.ref(`groups/${activeChatId}/members/${usernameInput}`).set({
+        username: usernameInput,
+        role: 'Membro'
+      });
+      db.ref(`my_groups/${usernameInput}/${activeChatId}`).set(true);
+
+      showNotice('addMemberNotice', `${usernameInput} foi adicionado ao grupo!`, 'success');
+      setTimeout(() => {
+        closeModal('addMemberToGroupModal');
+        document.getElementById('addMemberUsernameInput').value = '';
+        renderGroupMembersModal();
+      }, 1000);
+    }
+  });
+}
+
+function changeGroupMemberRole(targetUsername) {
+  const newRole = prompt(`Digite o novo cargo para ${targetUsername} (Ex: Admin, Moderador, VIP):`);
+  if (newRole !== null && newRole.trim() !== '') {
+    db.ref(`groups/${activeChatId}/members/${targetUsername}/role`).set(newRole.trim()).then(() => {
+      renderGroupMembersModal();
+    });
+  }
+}
+
+function kickGroupMember(targetUsername) {
+  if (confirm(`Expulsar ${targetUsername} do grupo?`)) {
+    db.ref(`groups/${activeChatId}/members/${targetUsername}`).remove();
+    db.ref(`my_groups/${targetUsername}/${activeChatId}`).remove().then(() => {
+      sendZapEmail(targetUsername, 'Removido de um Grupo', `Você foi removido do grupo "${activeGroupData.name}" pelo administrador ${currentUser}.`);
+      renderGroupMembersModal();
+    });
+  }
 }
 
 function openAdminUsersModal() {
@@ -391,6 +603,9 @@ function openModal(modalId) {
   document.getElementById(modalId)?.classList.remove('hidden');
   showNotice('settingsNotice', '', '');
   showNotice('addContactNotice', '', '');
+  showNotice('createGroupNotice', '', '');
+
+  if (modalId === 'groupInfoModal') renderGroupMembersModal();
 }
 
 function closeModal(modalId) {
@@ -463,12 +678,18 @@ function filterContacts() {
   });
 }
 
-// MENU DE AÇÕES DA MENSAGEM (2 CLIQUES / 2 TOQUES)
+// MENU DE AÇÕES DA MENSAGEM (2 CLIQUES)
 function openMsgActions(ds) {
   selectedMsgData = ds;
   const isMe = ds.isMe === 'true';
   const body = document.getElementById('msgActionsBody');
   if (!body) return;
+
+  let isGroupAdmin = false;
+  if (activeChatId.startsWith('group_') && activeGroupData) {
+    const myRole = activeGroupData.members?.[currentUser]?.role || '';
+    isGroupAdmin = activeGroupData.owner === currentUser || myRole.includes('Admin') || myRole.includes('Dono');
+  }
 
   if (isMe) {
     body.innerHTML = `
@@ -480,20 +701,33 @@ function openMsgActions(ds) {
     body.innerHTML = `
       <button class="modal-btn" onclick="setupReplyToMsg()">↩️ Responder</button>
       <button class="modal-btn secondary" onclick="openForwardModal()">↗️ Encaminhar Mensagem</button>
+      ${isGroupAdmin ? `<button class="modal-btn danger" onclick="deleteMsgAsGroupAdmin()">🛡️ Apagar como Admin (Grupo)</button>` : ''}
     `;
   }
 
   openModal('msgActionsModal');
 }
 
+function deleteMsgAsGroupAdmin() {
+  if (!selectedMsgData) return;
+  const authorName = selectedMsgData.author;
+  const rawAuthorUsername = selectedMsgData.rawAuthor;
+
+  db.ref(`${selectedMsgData.chatPath}/${selectedMsgData.key}`).update({
+    text: encryptText('🚫 Mensagem apagada pelo Administrador'),
+    image: null, audio: null, file: null, deleted: true
+  }).then(() => {
+    closeModal('msgActionsModal');
+    // Dispara e-mail interno para o dono da mensagem
+    sendZapEmail(rawAuthorUsername, 'Mensagem Apagada por Admin', `Sua mensagem no grupo "${activeGroupData?.name || 'Grupo'}" foi apagada pelo administrador ${userData?.displayName || currentUser}.`);
+  });
+}
+
 function deleteMsgForEveryone() {
   if (!selectedMsgData) return;
   db.ref(`${selectedMsgData.chatPath}/${selectedMsgData.key}`).update({
     text: encryptText('🚫 Esta mensagem foi apagada'),
-    image: null,
-    audio: null,
-    file: null,
-    deleted: true
+    image: null, audio: null, file: null, deleted: true
   }).then(() => closeModal('msgActionsModal'));
 }
 
@@ -675,6 +909,11 @@ function openChat(chatId, title, avatarType, avatarUrl) {
   activeChatId = chatId;
   document.getElementById('activeChatTitle').innerText = title;
   cancelReply();
+
+  const groupSettingsBtn = document.getElementById('groupSettingsHeaderBtn');
+  if (groupSettingsBtn) {
+    groupSettingsBtn.style.display = activeChatId.startsWith('group_') ? 'inline-block' : 'none';
+  }
   
   const avatarImg = document.getElementById('activeChatAvatar');
   if (avatarUrl) {
@@ -698,10 +937,16 @@ function openChat(chatId, title, avatarType, avatarUrl) {
 
   if (activeListener) activeListener.off();
 
+  // Carrega dados do grupo se for chat de grupo
+  if (activeChatId.startsWith('group_')) {
+    db.ref(`groups/${activeChatId}`).get().then(snap => {
+      if (snap.exists()) activeGroupData = snap.val();
+    });
+  }
+
   const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
   activeListener = db.ref(chatPath);
 
-  // Escutar mensagens escondidas pelo "Apagar para mim"
   let hiddenMsgsMap = {};
   db.ref(`hidden_msgs/${currentUser}`).get().then((hSnap) => {
     if (hSnap.exists()) hiddenMsgsMap = hSnap.val();
@@ -709,7 +954,7 @@ function openChat(chatId, title, avatarType, avatarUrl) {
 
   activeListener.on('child_added', (snapshot) => {
     const msgKey = snapshot.key;
-    if (hiddenMsgsMap[msgKey]) return; // Ignora mensagem apagada para mim
+    if (hiddenMsgsMap[msgKey]) return;
 
     const msg = snapshot.val();
     const isMe = msg.author === currentUser;
@@ -721,10 +966,10 @@ function openChat(chatId, title, avatarType, avatarUrl) {
     msgDiv.id = 'msg_' + msgKey;
     msgDiv.className = `msg ${isMe ? 'sent' : 'received'}`;
 
-    // DATASET PARA AÇÕES DE 2 CLIQUES / TOUCH
     msgDiv.dataset.key = msgKey;
     msgDiv.dataset.isMe = isMe;
     msgDiv.dataset.text = msg.text || '';
+    msgDiv.dataset.rawAuthor = msg.author;
     msgDiv.dataset.author = msg.authorDisplayName || msg.author;
     msgDiv.dataset.hasText = decryptedText ? 'true' : 'false';
     msgDiv.dataset.hasImage = msg.image ? 'true' : 'false';
@@ -732,7 +977,6 @@ function openChat(chatId, title, avatarType, avatarUrl) {
     msgDiv.dataset.chatPath = chatPath;
     if (msg.file) msgDiv.dataset.file = JSON.stringify(msg.file);
 
-    // GATILHO DE DUPLO CLIQUE / DUPLO TOQUE NO CELULAR
     msgDiv.ondblclick = function() { openMsgActions(this.dataset); };
     let lastTap = 0;
     msgDiv.addEventListener('touchend', function(e) {
@@ -747,7 +991,6 @@ function openChat(chatId, title, avatarType, avatarUrl) {
 
     let contentHtml = '';
 
-    // CITAÇÃO DE RESPOSTA
     if (msg.replyTo) {
       contentHtml += `
         <div class="quoted-msg-box">
@@ -830,7 +1073,6 @@ function openChat(chatId, title, avatarType, avatarUrl) {
     box.scrollTop = box.scrollHeight;
   });
 
-  // Atualizar mensagens alteradas (como edição ou apagar)
   activeListener.on('child_changed', (snapshot) => {
     const el = document.getElementById('msg_' + snapshot.key);
     if (el) {

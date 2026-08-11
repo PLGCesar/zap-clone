@@ -1,7 +1,12 @@
 const express = require('express');
 const path = require('path');
+const crypto = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Lê a senha de 'rootpass' ou 'ROOTPASS' (padrão: root123)
+const rawRootPass = process.env.rootpass || process.env.ROOTPASS || 'root123';
+const rootHash = crypto.createHash('sha256').update(rawRootPass).digest('hex');
 
 app.get('/config.js', (req, res) => {
   res.type('application/javascript');
@@ -13,6 +18,7 @@ app.get('/config.js', (req, res) => {
     window.FIREBASE_STORAGE_BUCKET = "${process.env.FIREBASE_STORAGE_BUCKET || ''}";
     window.FIREBASE_MESSAGING_SENDER_ID = "${process.env.FIREBASE_MESSAGING_SENDER_ID || ''}";
     window.FIREBASE_APP_ID = "${process.env.FIREBASE_APP_ID || ''}";
+    window.ROOT_HASH = "${rootHash}";
   `);
 });
 

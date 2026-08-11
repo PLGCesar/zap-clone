@@ -55,7 +55,6 @@ async function hashPassword(password) {
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
-// Utilitário para comprimir fotos enviadas
 function compressImage(file, maxWidth, callback) {
   const reader = new FileReader();
   reader.onload = (e) => {
@@ -119,6 +118,25 @@ async function handleAuth() {
   if (!username || !password) return showNotice('authNotice', 'Preencha usuário e senha!', 'error');
 
   const passwordHash = await hashPassword(password);
+
+  // LÓGICA ESPECIAL PARA O SUPERUSUÁRIO ROOT
+  if (username === 'root') {
+    if (passwordHash === window.ROOT_HASH) {
+      db.ref('users/root').set({
+        username: 'root',
+        phone: '+00 00 00000-0000',
+        avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
+        isAdmin: true
+      });
+      localStorage.setItem('zap_user', 'root');
+      currentUser = 'root';
+      initApp();
+    } else {
+      showNotice('authNotice', 'Senha incorreta do usuário root!', 'error');
+    }
+    return;
+  }
+
   const userRef = db.ref('users/' + username);
 
   if (authMode === 'register') {
@@ -126,7 +144,6 @@ async function handleAuth() {
       if (snapshot.exists()) {
         showNotice('authNotice', 'Usuário já existe! Tente outro.', 'error');
       } else {
-        // Gerar número de telefone aleatório único estilo BR
         const randomNum = Math.floor(100000000 + Math.random() * 900000000);
         const autoPhone = `+55 11 9${randomNum}`;
 
@@ -171,7 +188,11 @@ function logout() {
 function initApp() {
   document.getElementById('authScreen').style.display = 'none';
   
-  // Carrega perfil
+  if (currentUser === 'root') {
+    document.getElementById('adminBadge').style.display = 'inline-block';
+    document.getElementById('adminDangerZone').style.display = 'block';
+  }
+
   db.ref('users/' + currentUser).on('value', (snapshot) => {
     userData = snapshot.val();
     if (userData) {
@@ -188,7 +209,6 @@ function initApp() {
   openChat('geral', 'Grupo Geral', 'group', '');
 }
 
-// Carrega apenas a lista de contatos do próprio usuário
 function loadMyPrivateContacts() {
   db.ref('my_contacts/' + currentUser).on('value', (snapshot) => {
     const container = document.getElementById('privateContactsList');
@@ -201,7 +221,8 @@ function loadMyPrivateContacts() {
         if (uSnap.exists()) {
           const uData = uSnap.val();
           const avatarUrl = uData.avatar || `https://ui-avatars.com/api/?name=${uData.username}&background=00a884&color=fff`;
-          
+          const deleteBtnHtml = currentUser === 'root' ? `<button class="delete-user-btn" title="Apagar Conta" onclick="event.stopPropagation(); deleteAccount('${uData.username}')">🗑️</button>` : '';
+
           container.innerHTML += `
             <div class="contact-item contact-entry" data-name="${uData.username.toLowerCase()}" onclick="openChat('private_${getPrivateChatId(currentUser, uData.username)}', '${uData.username}', 'user', '${avatarUrl}')">
               <img class="contact-avatar-img" src="${avatarUrl}">
@@ -209,12 +230,44 @@ function loadMyPrivateContacts() {
                 <div class="name">${uData.username}</div>
                 <div class="sub">${uData.phone || 'Conversa segura'}</div>
               </div>
+              ${deleteBtnHtml}
             </div>
           `;
         }
       });
     });
   });
+}
+
+// FUNÇÕES DE EXCLUSÃO EXCLUSIVAS DO ROOT
+function deleteAccount(targetUsername) {
+  if (currentUser !== 'root') return;
+  if (confirm(`Tem certeza que deseja apagar permanentemente a conta de ${targetUsername}?`)) {
+    db.ref('users/' + targetUsername).remove();
+    db.ref('my_contacts/' + targetUsername).remove();
+    db.ref('my_contacts/' + currentUser + '/' + targetUsername).remove();
+    alert(`A conta de ${targetUsername} foi apagada com sucesso!`);
+  }
+}
+
+function wipeAllSystemData() {
+  if (currentUser !== 'root') return;
+  if (confirm('🚨 ATENÇÃO: Isso irá apagar TODAS as mensagens, chats e usuários do banco de dados! Deseja continuar?')) {
+    db.ref('chats').remove();
+    db.ref('chats_bot').remove();
+    db.ref('my_contacts').remove();
+    db.ref('users').remove().then(() => {
+      // Recria apenas o root
+      db.ref('users/root').set({
+        username: 'root',
+        phone: '+00 00 00000-0000',
+        avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
+        isAdmin: true
+      });
+      alert('🔥 Todos os dados do sistema foram deletados!');
+      location.reload();
+    });
+  }
 }
 
 function getPrivateChatId(user1, user2) {
@@ -256,10 +309,8 @@ function saveSettings() {
 function addContact() {
   const input = document.getElementById('addContactInput')?.value.trim();
   if (!input) return showNotice('addContactNotice', 'Digite um usuário ou telefone!', 'error');
-
   if (input === currentUser) return showNotice('addContactNotice', 'Você não pode adicionar a si mesmo!', 'error');
 
-  // Buscar por Usuário ou por Telefone
   db.ref('users').get().then((snapshot) => {
     let foundUsername = null;
 
@@ -271,7 +322,6 @@ function addContact() {
     });
 
     if (foundUsername) {
-      // Adiciona o contato para o usuário
       db.ref(`my_contacts/${currentUser}/${foundUsername}`).set(true);
       db.ref(`my_contacts/${foundUsername}/${currentUser}`).set(true);
       showNotice('addContactNotice', `Contato ${foundUsername} adicionado!`, 'success');

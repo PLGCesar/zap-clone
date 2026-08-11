@@ -30,12 +30,15 @@
       </div>
     </div>
 
-    <!-- PAINEL DE CONTATOS (SIDEBAR WHATSAPP) -->
+    <!-- PAINEL DE CONTATOS -->
     <div class="contacts-panel" id="contactsPanel">
       <div class="user-header">
         <div class="my-profile">
           <img class="my-avatar-img" id="myHeaderAvatar" src="https://ui-avatars.com/api/?name=User&background=00a884&color=fff">
-          <span class="my-name" id="myAccountName">Usuário</span>
+          <div>
+            <span class="my-name" id="myAccountName">Usuário</span>
+            <span class="admin-badge" id="adminBadge" style="display:none;">👑 Root</span>
+          </div>
         </div>
         <div class="header-actions">
           <button class="icon-btn" onclick="openModal('addContactModal')" title="Adicionar Contato">➕</button>
@@ -44,14 +47,12 @@
         </div>
       </div>
 
-      <!-- Barra de Busca de Contatos -->
       <div class="search-bar-container">
         <input type="text" class="search-input" id="searchContactsInput" placeholder="Pesquisar contatos..." oninput="filterContacts()">
       </div>
 
       <div class="contacts-list" id="contactsList">
-        
-        <!-- Bot Server Fix -->
+        <!-- Server Bot -->
         <div class="contact-item contact-entry" data-name="server bot" onclick="openChat('server', 'Server Bot', 'bot', '')">
           <div class="contact-avatar-img bot">🤖</div>
           <div class="contact-info">
@@ -60,7 +61,7 @@
           </div>
         </div>
 
-        <!-- Grupo Geral Fix -->
+        <!-- Grupo Geral -->
         <div class="contact-item contact-entry" data-name="grupo geral" onclick="openChat('geral', 'Grupo Geral', 'group', '')">
           <div class="contact-avatar-img group">👥</div>
           <div class="contact-info">
@@ -69,13 +70,12 @@
           </div>
         </div>
 
-        <!-- Lista Privada de Contatos Adicionados -->
+        <!-- Lista Privada de Contatos -->
         <div id="privateContactsList"></div>
-
       </div>
     </div>
 
-    <!-- JANELA DE CHAT -->
+    <!-- TELA DE CHAT -->
     <div class="chat-panel hidden" id="chatPanel">
       <div class="chat-header">
         <button class="back-btn" onclick="closeChat()">←</button>
@@ -93,7 +93,6 @@
       </div>
 
       <div class="chat-footer">
-        <!-- Botão de Anexo/Foto -->
         <button class="attach-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Enviar Foto">📷</button>
         <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="sendPhotoInChat(event)">
 
@@ -108,7 +107,7 @@
 
   </div>
 
-  <!-- MODAL DE CONFIGURAÇÕES (⚙️) -->
+  <!-- MODAL CONFIGURAÇÕES -->
   <div class="modal-overlay hidden" id="settingsModal">
     <div class="modal-card">
       <div class="modal-header">
@@ -131,11 +130,18 @@
         <div class="modal-notice" id="settingsNotice"></div>
 
         <button class="modal-btn" onclick="saveSettings()">Salvar Alterações</button>
+
+        <!-- PAINEL EXCLUSIVO DO ROOT / ADMIN -->
+        <div id="adminDangerZone" style="display:none; margin-top:20px; border-top:1px solid #ea4335; padding-top:14px;">
+          <h4 style="color:#ea4335; font-size:14px;">⚡ Painel do Administrador (Root)</h4>
+          <p style="font-size:12px; color:#8696a0; margin: 6px 0;">Apaga todas as conversas e contas de todo mundo:</p>
+          <button class="modal-btn danger" onclick="wipeAllSystemData()">🔥 DELETAR TODOS OS DADOS DO SISTEMA</button>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- MODAL ADICIONAR CONTATO (➕) -->
+  <!-- MODAL ADICIONAR CONTATO -->
   <div class="modal-overlay hidden" id="addContactModal">
     <div class="modal-card">
       <div class="modal-header">
@@ -144,11 +150,8 @@
       </div>
       <div class="modal-body">
         <p style="font-size: 13px; color: #8696a0; margin-bottom: 12px;">Digite o Usuário ou Número de Telefone da pessoa:</p>
-        
         <input type="text" id="addContactInput" placeholder="Ex: joao ou +55 11 98888-7777">
-
         <div class="modal-notice" id="addContactNotice"></div>
-
         <button class="modal-btn" onclick="addContact()">Buscar e Adicionar</button>
       </div>
     </div>

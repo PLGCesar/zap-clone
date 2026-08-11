@@ -41,15 +41,12 @@
           </div>
         </div>
         <div class="header-actions">
-          <!-- Botão Adicionar (SVG) -->
           <button class="icon-btn" onclick="openModal('addContactModal')" title="Adicionar Contato">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
           </button>
-          <!-- Botão Configurações (SVG) -->
           <button class="icon-btn" onclick="openModal('settingsModal')" title="Configurações">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
           </button>
-          <!-- Botão Sair (SVG) -->
           <button class="icon-btn" onclick="logout()" title="Sair" style="color:#ea4335;">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
           </button>
@@ -63,9 +60,7 @@
       <div class="contacts-list" id="contactsList">
         <!-- Server Bot -->
         <div class="contact-item contact-entry" data-name="server bot" onclick="openChat('server', 'Server Bot', 'bot', '')">
-          <div class="contact-avatar-img bot">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.38-1 1.72V7h2a3 3 0 013 3v8a3 3 0 01-3 3H8a3 3 0 01-3-3v-8a3 3 0 013-3h2V5.72C9.4 5.38 9 4.74 9 4a2 2 0 013-2zm-3 8a1 1 0 100 2 1 1 0 000-2zm6 0a1 1 0 100 2 1 1 0 000-2zm-5 5a1 1 0 000 2h4a1 1 0 100-2H10z"/></svg>
-          </div>
+          <img class="contact-avatar-img" id="botContactAvatar" src="https://ui-avatars.com/api/?name=Bot&background=00a884&color=fff">
           <div class="contact-info">
             <div class="name">Server (Bot Teste)</div>
             <div class="sub">Responde "Pong" automaticamente</div>
@@ -112,7 +107,15 @@
         </button>
         <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="sendPhotoInChat(event)">
 
+        <!-- Ícone Microfone Áudio (SVG) -->
+        <button class="attach-btn" id="micBtn" onclick="toggleAudioRecording()" title="Gravar Áudio">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.49 6-3.31 6-6.72h-1.7z"/></svg>
+        </button>
+
+        <span class="recording-status" id="recordingStatus" style="display:none;">● Gravando <span id="recordTimer">00:00</span></span>
+
         <input type="text" id="messageText" placeholder="Mensagem..." autocomplete="off">
+        
         <button class="send-btn" onclick="sendMessage()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
@@ -137,6 +140,15 @@
           <input type="file" id="avatarFileInput" accept="image/*" style="display:none;" onchange="previewProfilePhoto(event)">
         </div>
 
+        <label>Cor de Fundo do Chat:</label>
+        <select id="bgThemeSelect" onchange="changeBgTheme(this.value)">
+          <option value="#0b141a">Escuro Padrão (#0b141a)</option>
+          <option value="#072a24">Verde WhatsApp (#072a24)</option>
+          <option value="#0f172a">Azul Noturno (#0f172a)</option>
+          <option value="#1e1b4b">Roxo Escuro (#1e1b4b)</option>
+          <option value="#262626">Grafite (#262626)</option>
+        </select>
+
         <label>Seu Usuário:</label>
         <input type="text" id="settingsUsername" readonly style="opacity:0.7;">
 
@@ -147,6 +159,14 @@
 
         <button class="modal-btn" onclick="saveSettings()">Salvar Alterações</button>
 
+        <!-- OPÇÃO EXCLUSIVA DO ROOT: MUDAR FOTO DO BOT -->
+        <div id="rootBotAvatarSection" style="display:none; margin-top:16px; border-top:1px solid #2a3942; padding-top:12px;">
+          <label style="color:#00a884; font-weight:bold;">🤖 Mudar Foto do Server Bot (Exclusivo Root):</label>
+          <button style="background:#202c33; color:#00a884; border:1px solid #00a884; padding:8px; width:100%; border-radius:6px; margin-top:6px; cursor:pointer;" onclick="document.getElementById('botAvatarFileInput').click()">Selecionar Foto do Bot</button>
+          <input type="file" id="botAvatarFileInput" accept="image/*" style="display:none;" onchange="changeBotAvatarByRoot(event)">
+        </div>
+
+        <!-- PAINEL DE PERIGO DO ROOT -->
         <div id="adminDangerZone" style="display:none; margin-top:20px; border-top:1px solid #ea4335; padding-top:14px;">
           <h4 style="color:#ea4335; font-size:14px;">⚡ Painel do Administrador (Root)</h4>
           <p style="font-size:12px; color:#8696a0; margin: 6px 0;">Apaga todas as conversas e contas de todo mundo:</p>

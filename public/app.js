@@ -22,8 +22,15 @@ let authMode = 'login';
 let activeChatId = 'geral';
 let activeListener = null;
 let pendingAvatarBase64 = null;
+let botAvatarUrl = 'https://ui-avatars.com/api/?name=Bot&background=00a884&color=fff';
 
-// Criptografia Ultra-Leve e Instantânea (Fast XOR 1-Byte + Base64)
+// Variáveis de Gravação de Áudio
+let mediaRecorder = null;
+let audioChunks = [];
+let isRecording = false;
+let recordTimerInterval = null;
+let recordSeconds = 0;
+
 function encryptText(str) {
   if (!str) return '';
   let res = '';
@@ -87,7 +94,19 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('messageText')?.addEventListener('keypress', (e) => {
     if (e.key === 'Enter') sendMessage();
   });
+
+  // Carregar tema de fundo salvo
+  const savedBg = localStorage.getItem('zap_bg_theme') || '#0b141a';
+  changeBgTheme(savedBg);
+  const selectEl = document.getElementById('bgThemeSelect');
+  if (selectEl) selectEl.value = savedBg;
 });
+
+function changeBgTheme(color) {
+  localStorage.setItem('zap_bg_theme', color);
+  const box = document.getElementById('messagesBox');
+  if (box) box.style.backgroundColor = color;
+}
 
 function switchAuthTab(mode) {
   authMode = mode;
@@ -189,7 +208,17 @@ function initApp() {
   if (currentUser === 'root') {
     document.getElementById('adminBadge').style.display = 'inline-block';
     document.getElementById('adminDangerZone').style.display = 'block';
+    document.getElementById('rootBotAvatarSection').style.display = 'block';
   }
+
+  // Escutar alteração na foto do bot
+  db.ref('bot_settings/avatar').on('value', (snap) => {
+    if (snap.exists()) {
+      botAvatarUrl = snap.val();
+      const botAvatarEl = document.getElementById('botContactAvatar');
+      if (botAvatarEl) botAvatarEl.src = botAvatarUrl;
+    }
+  });
 
   db.ref('users/' + currentUser).on('value', (snapshot) => {
     userData = snapshot.val();
@@ -207,6 +236,19 @@ function initApp() {
   openChat('geral', 'Grupo Geral', 'group', '');
 }
 
+// ROOT MUDAR FOTO DO BOT
+function changeBotAvatarByRoot(event) {
+  if (currentUser !== 'root') return;
+  const file = event.target.files[0];
+  if (file) {
+    compressImage(file, 200, (base64) => {
+      db.ref('bot_settings/avatar').set(base64).then(() => {
+        showNotice('settingsNotice', 'Foto do Bot Server atualizada!', 'success');
+      });
+    });
+  }
+}
+
 function loadMyPrivateContacts() {
   db.ref('my_contacts/' + currentUser).on('value', (snapshot) => {
     const container = document.getElementById('privateContactsList');
@@ -219,8 +261,6 @@ function loadMyPrivateContacts() {
         if (uSnap.exists()) {
           const uData = uSnap.val();
           const avatarUrl = uData.avatar || `https://ui-avatars.com/api/?name=${uData.username}&background=00a884&color=fff`;
-          
-          // Ícone Lixeira SVG
           const deleteBtnHtml = currentUser === 'root' ? `
             <button class="delete-user-btn" title="Apagar Conta" onclick="event.stopPropagation(); deleteAccount('${uData.username}')">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
@@ -355,7 +395,7 @@ function openChat(chatId, title, avatarType, avatarUrl) {
   if (avatarUrl) {
     avatarImg.src = avatarUrl;
   } else if (avatarType === 'bot') {
-    avatarImg.src = 'https://ui-avatars.com/api/?name=Bot&background=00a884&color=fff';
+    avatarImg.src = botAvatarUrl;
   } else {
     avatarImg.src = 'https://ui-avatars.com/api/?name=Geral&background=007a65&color=fff';
   }
@@ -391,11 +431,14 @@ function openChat(chatId, title, avatarType, avatarUrl) {
       const decryptedImg = decryptText(msg.image);
       contentHtml += `<img class="msg-img" src="${decryptedImg}">`;
     }
+    if (msg.audio) {
+      const decryptedAudio = decryptText(msg.audio);
+      contentHtml += `<audio class="msg-audio" controls src="${decryptedAudio}"></audio>`;
+    }
     if (decryptedText) {
       contentHtml += `<div>${decryptedText}</div>`;
     }
 
-    // Check duplo azul em SVG
     const checkSvg = `
       <svg viewBox="0 0 16 11" width="16" height="11" fill="currentColor">
         <path d="M11.05 0L4.7 6.35 1.95 3.6 0 5.55l4.7 4.7 8.3-8.3z"/>
@@ -421,12 +464,63 @@ function closeChat() {
   document.getElementById('contactsPanel').classList.remove('hidden');
 }
 
+// LÓGICA DE GRAVAÇÃO DE ÁUDIO DE VOZ
+async function toggleAudioRecording() {
+  const micBtn = document.getElementById('micBtn');
+  const statusEl = document.getElementById('recordingStatus');
+
+  if (!isRecording) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder = new MediaRecorder(stream);
+      audioChunks = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunks.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Audio = reader.result;
+          dispatchMessage('', null, base64Audio);
+        };
+        reader.readAsDataURL(audioBlob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      isRecording = true;
+      micBtn.classList.add('recording');
+      statusEl.style.display = 'flex';
+      
+      recordSeconds = 0;
+      recordTimerInterval = setInterval(() => {
+        recordSeconds++;
+        const mins = String(Math.floor(recordSeconds / 60)).padStart(2, '0');
+        const secs = String(recordSeconds % 60).padStart(2, '0');
+        document.getElementById('recordTimer').innerText = `${mins}:${secs}`;
+      }, 1000);
+
+    } catch (err) {
+      alert("Microfone indisponível ou permissão negada!");
+    }
+  } else {
+    mediaRecorder.stop();
+    isRecording = false;
+    micBtn.classList.remove('recording');
+    statusEl.style.display = 'none';
+    clearInterval(recordTimerInterval);
+  }
+}
+
 function sendMessage() {
   const textInput = document.getElementById('messageText');
   const rawText = textInput?.value.trim() || '';
 
   if (rawText !== '') {
-    dispatchMessage(rawText, null);
+    dispatchMessage(rawText, null, null);
     textInput.value = '';
   }
 }
@@ -435,12 +529,12 @@ function sendPhotoInChat(event) {
   const file = event.target.files[0];
   if (file) {
     compressImage(file, 600, (base64Img) => {
-      dispatchMessage('', base64Img);
+      dispatchMessage('', base64Img, null);
     });
   }
 }
 
-function dispatchMessage(text, imageBase64) {
+function dispatchMessage(text, imageBase64, audioBase64) {
   const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
   const chatRef = db.ref(chatPath);
 
@@ -450,9 +544,8 @@ function dispatchMessage(text, imageBase64) {
     timestamp: Date.now()
   };
 
-  if (imageBase64) {
-    payload.image = encryptText(imageBase64);
-  }
+  if (imageBase64) payload.image = encryptText(imageBase64);
+  if (audioBase64) payload.audio = encryptText(audioBase64);
 
   chatRef.push(payload).then(() => {
     if (activeChatId === 'server') {

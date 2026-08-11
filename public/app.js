@@ -445,6 +445,82 @@ function filterContacts() {
   });
 }
 
+// PLAYER DE ÁUDIO CUSTOMIZADO ESTILO WHATSAPP
+function toggleVoicePlay(audioId, btn) {
+  const audio = document.getElementById(audioId);
+  if (!audio) return;
+
+  // Pausa qualquer outro áudio rodando na tela
+  document.querySelectorAll('audio').forEach(a => {
+    if (a.id !== audioId) {
+      a.pause();
+      a.currentTime = 0;
+    }
+  });
+
+  const playIcon = btn.querySelector('.play-icon');
+  const pauseIcon = btn.querySelector('.pause-icon');
+
+  if (audio.paused) {
+    audio.play();
+    playIcon?.classList.add('hidden');
+    pauseIcon?.classList.remove('hidden');
+  } else {
+    audio.pause();
+    playIcon?.classList.remove('hidden');
+    pauseIcon?.classList.add('hidden');
+  }
+}
+
+function updateVoiceProgress(audioId, seekId, durId) {
+  const audio = document.getElementById(audioId);
+  const seek = document.getElementById(seekId);
+  const dur = document.getElementById(durId);
+
+  if (audio && seek && audio.duration) {
+    const pct = (audio.currentTime / audio.duration) * 100;
+    seek.value = pct;
+    if (dur) dur.innerText = formatAudioTime(audio.currentTime);
+  }
+}
+
+function seekVoice(audioId, pct) {
+  const audio = document.getElementById(audioId);
+  if (audio && audio.duration) {
+    audio.currentTime = (pct / 100) * audio.duration;
+  }
+}
+
+function initVoiceMeta(audioId, durId) {
+  const audio = document.getElementById(audioId);
+  const dur = document.getElementById(durId);
+  if (audio && dur && audio.duration && !isNaN(audio.duration)) {
+    dur.innerText = formatAudioTime(audio.duration);
+  }
+}
+
+function resetVoicePlayer(audioId, seekId, durId) {
+  const audio = document.getElementById(audioId);
+  const seek = document.getElementById(seekId);
+  const dur = document.getElementById(durId);
+
+  if (seek) seek.value = 0;
+  if (audio && dur) dur.innerText = formatAudioTime(audio.duration || 0);
+
+  const btn = audio?.closest('.voice-msg-player')?.querySelector('.voice-play-btn');
+  if (btn) {
+    btn.querySelector('.play-icon')?.classList.remove('hidden');
+    btn.querySelector('.pause-icon')?.classList.add('hidden');
+  }
+}
+
+function formatAudioTime(secs) {
+  if (isNaN(secs) || secs < 0) return '0:00';
+  const m = Math.floor(secs / 60);
+  const s = Math.floor(secs % 60);
+  return `${m}:${s < 10 ? '0' : ''}${s}`;
+}
+
 function openChat(chatId, title, avatarType, avatarUrl) {
   activeChatId = chatId;
   document.getElementById('activeChatTitle').innerText = title;
@@ -489,10 +565,31 @@ function openChat(chatId, title, avatarType, avatarUrl) {
       const decryptedImg = decryptText(msg.image);
       contentHtml += `<img class="msg-img" src="${decryptedImg}">`;
     }
+    
+    // RENDERIZAÇÃO DO PLAYER DE ÁUDIO CUSTOMIZADO DO WHATSAPP
     if (msg.audio) {
       const decryptedAudio = decryptText(msg.audio);
-      contentHtml += `<audio class="msg-audio" controls src="${decryptedAudio}"></audio>`;
+      const uniqueAudId = 'aud_' + Math.random().toString(36).substr(2, 9);
+      const seekId = 'seek_' + uniqueAudId;
+      const durId = 'dur_' + uniqueAudId;
+
+      contentHtml += `
+        <div class="voice-msg-player">
+          <button class="voice-play-btn" onclick="toggleVoicePlay('${uniqueAudId}', this)">
+            <svg class="play-icon" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+            <svg class="pause-icon hidden" viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+          </button>
+          <div class="voice-progress-container">
+            <input type="range" class="voice-seeker" id="${seekId}" value="0" min="0" max="100" oninput="seekVoice('${uniqueAudId}', this.value)">
+            <div class="voice-meta">
+              <span class="voice-duration" id="${durId}">0:00</span>
+            </div>
+          </div>
+          <audio id="${uniqueAudId}" src="${decryptedAudio}" preload="metadata" onloadedmetadata="initVoiceMeta('${uniqueAudId}', '${durId}')" ontimeupdate="updateVoiceProgress('${uniqueAudId}', '${seekId}', '${durId}')" onended="resetVoicePlayer('${uniqueAudId}', '${seekId}', '${durId}')"></audio>
+        </div>
+      `;
     }
+
     if (decryptedText) {
       contentHtml += `<div>${decryptedText}</div>`;
     }

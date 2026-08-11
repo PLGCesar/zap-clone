@@ -3,62 +3,75 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Zap Clone - Protegido</title>
+  <title>Zap Clone</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
   <div class="app-wrapper">
 
-    <!-- TELA DE AUTH (LOGIN / REGISTRO COM SENHA) -->
+    <!-- TELA DE LOGIN / REGISTRO -->
     <div class="auth-screen" id="authScreen">
       <div class="auth-card">
         <h2>Zap Clone 💬</h2>
-        <p>Acesse com sua conta criptografada</p>
+        <p>Acesse sua conta do WhatsApp</p>
         
         <div class="auth-tabs">
           <button class="auth-tab active" id="tabLogin" onclick="switchAuthTab('login')">Entrar</button>
           <button class="auth-tab" id="tabRegister" onclick="switchAuthTab('register')">Criar Conta</button>
         </div>
 
-        <input type="text" id="usernameInput" placeholder="Usuário" autocomplete="off">
-        <input type="password" id="passwordInput" placeholder="Senha">
+        <input type="text" id="usernameInput" placeholder="Nome de Usuário" autocomplete="off">
+        <input type="password" id="passwordInput" placeholder="Sua Senha">
+
+        <div class="modal-notice" id="authNotice"></div>
 
         <button class="submit-btn" id="authSubmitBtn" onclick="handleAuth()">Entrar</button>
       </div>
     </div>
 
-    <!-- TELA DE CONTATOS -->
+    <!-- PAINEL DE CONTATOS (SIDEBAR WHATSAPP) -->
     <div class="contacts-panel" id="contactsPanel">
       <div class="user-header">
         <div class="my-profile">
-          <div class="avatar" id="myAvatarHeader">U</div>
+          <img class="my-avatar-img" id="myHeaderAvatar" src="https://ui-avatars.com/api/?name=User&background=00a884&color=fff">
           <span class="my-name" id="myAccountName">Usuário</span>
         </div>
-        <button class="logout-btn" onclick="logout()">Sair</button>
+        <div class="header-actions">
+          <button class="icon-btn" onclick="openModal('addContactModal')" title="Adicionar Contato">➕</button>
+          <button class="icon-btn" onclick="openModal('settingsModal')" title="Configurações">⚙️</button>
+          <button class="icon-btn" onclick="logout()" title="Sair" style="color:#ea4335;">🚪</button>
+        </div>
       </div>
 
-      <div class="contacts-list">
-        <!-- Bot Server -->
-        <div class="contact-item" onclick="openChat('server', 'Server Bot', 'bot')">
-          <div class="avatar bot">🤖</div>
+      <!-- Barra de Busca de Contatos -->
+      <div class="search-bar-container">
+        <input type="text" class="search-input" id="searchContactsInput" placeholder="Pesquisar contatos..." oninput="filterContacts()">
+      </div>
+
+      <div class="contacts-list" id="contactsList">
+        
+        <!-- Bot Server Fix -->
+        <div class="contact-item contact-entry" data-name="server bot" onclick="openChat('server', 'Server Bot', 'bot', '')">
+          <div class="contact-avatar-img bot">🤖</div>
           <div class="contact-info">
             <div class="name">Server (Bot Teste)</div>
-            <div class="sub">Responde "Pong" criptografado</div>
+            <div class="sub">Responde "Pong" automaticamente</div>
           </div>
         </div>
 
-        <!-- Grupo Geral -->
-        <div class="contact-item" onclick="openChat('geral', 'Grupo Geral', 'group')">
-          <div class="avatar group">👥</div>
+        <!-- Grupo Geral Fix -->
+        <div class="contact-item contact-entry" data-name="grupo geral" onclick="openChat('geral', 'Grupo Geral', 'group', '')">
+          <div class="contact-avatar-img group">👥</div>
           <div class="contact-info">
             <div class="name">Grupo Geral</div>
             <div class="sub">Chat público seguro</div>
           </div>
         </div>
 
-        <!-- Outros usuários -->
-        <div id="dynamicUsers"></div>
+        <!-- Lista Privada de Contatos Adicionados -->
+        <div id="privateContactsList"></div>
+
       </div>
     </div>
 
@@ -66,10 +79,10 @@
     <div class="chat-panel hidden" id="chatPanel">
       <div class="chat-header">
         <button class="back-btn" onclick="closeChat()">←</button>
-        <div class="avatar" id="activeAvatar">💬</div>
+        <img class="my-avatar-img" id="activeChatAvatar" src="https://ui-avatars.com/api/?name=Chat&background=00a884&color=fff">
         <div>
           <div style="font-weight: 600; color: #e9edef;" id="activeChatTitle">Conversa</div>
-          <div style="font-size: 11px; color: #00a884;">online</div>
+          <div style="font-size: 11px; color: #00a884;" id="activeChatSub">online</div>
         </div>
       </div>
 
@@ -80,8 +93,12 @@
       </div>
 
       <div class="chat-footer">
+        <!-- Botão de Anexo/Foto -->
+        <button class="attach-btn" onclick="document.getElementById('chatPhotoInput').click()" title="Enviar Foto">📷</button>
+        <input type="file" id="chatPhotoInput" accept="image/*" style="display:none;" onchange="sendPhotoInChat(event)">
+
         <input type="text" id="messageText" placeholder="Mensagem..." autocomplete="off">
-        <button onclick="sendMessage()">
+        <button class="send-btn" onclick="sendMessage()">
           <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
             <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
           </svg>
@@ -89,6 +106,52 @@
       </div>
     </div>
 
+  </div>
+
+  <!-- MODAL DE CONFIGURAÇÕES (⚙️) -->
+  <div class="modal-overlay hidden" id="settingsModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Configurações do Perfil</h3>
+        <button class="modal-close" onclick="closeModal('settingsModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="avatar-upload-container">
+          <img class="avatar-preview" id="settingsAvatarPreview" src="https://ui-avatars.com/api/?name=User&background=00a884&color=fff">
+          <button style="background:#202c33; color:#00a884; border:1px solid #00a884; padding:6px 12px; border-radius:6px; font-size:12px; cursor:pointer;" onclick="document.getElementById('avatarFileInput').click()">Mudar Foto de Perfil</button>
+          <input type="file" id="avatarFileInput" accept="image/*" style="display:none;" onchange="previewProfilePhoto(event)">
+        </div>
+
+        <label>Seu Usuário:</label>
+        <input type="text" id="settingsUsername" readonly style="opacity:0.7;">
+
+        <label>Seu Número de Telefone:</label>
+        <input type="text" id="settingsPhone" placeholder="+55 11 9XXXX-XXXX">
+
+        <div class="modal-notice" id="settingsNotice"></div>
+
+        <button class="modal-btn" onclick="saveSettings()">Salvar Alterações</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ADICIONAR CONTATO (➕) -->
+  <div class="modal-overlay hidden" id="addContactModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3>Adicionar Novo Contato</h3>
+        <button class="modal-close" onclick="closeModal('addContactModal')">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 13px; color: #8696a0; margin-bottom: 12px;">Digite o Usuário ou Número de Telefone da pessoa:</p>
+        
+        <input type="text" id="addContactInput" placeholder="Ex: joao ou +55 11 98888-7777">
+
+        <div class="modal-notice" id="addContactNotice"></div>
+
+        <button class="modal-btn" onclick="addContact()">Buscar e Adicionar</button>
+      </div>
+    </div>
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>

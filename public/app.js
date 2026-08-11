@@ -17,15 +17,16 @@ if (Object.keys(firebaseConfig).length > 0) {
 const db = firebase.database();
 
 let currentUser = localStorage.getItem('zap_user') || null;
-let authMode = 'login'; // 'login' ou 'register'
+let userData = null;
+let authMode = 'login';
 let activeChatId = 'geral';
 let activeListener = null;
+let pendingAvatarBase64 = null;
 
-// Chave para Criptografia de Mensagens no Cliente
 const SECRET_CIPHER = "ZapSecretKey2026_Encrypt";
 
-// Função para Criptografar Mensagens
 function encryptText(text) {
+  if (!text) return '';
   let result = '';
   for (let i = 0; i < text.length; i++) {
     result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_CIPHER.charCodeAt(i % SECRET_CIPHER.length));
@@ -33,8 +34,8 @@ function encryptText(text) {
   return btoa(unescape(encodeURIComponent(result)));
 }
 
-// Função para Descriptografar Mensagens
 function decryptText(encrypted) {
+  if (!encrypted) return '';
   try {
     let decoded = decodeURIComponent(escape(atob(encrypted)));
     let result = '';
@@ -43,16 +44,39 @@ function decryptText(encrypted) {
     }
     return result;
   } catch (e) {
-    return encrypted; // Fallback se já for texto puro
+    return encrypted;
   }
 }
 
-// Hash SHA-256 de Senha
 async function hashPassword(password) {
   const encoder = new TextEncoder();
   const data = encoder.encode(password);
   const hash = await crypto.subtle.digest('SHA-256', data);
   return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Utilitário para comprimir fotos enviadas
+function compressImage(file, maxWidth, callback) {
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, width, height);
+      callback(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -72,24 +96,49 @@ function switchAuthTab(mode) {
   document.getElementById('tabLogin').className = `auth-tab ${mode === 'login' ? 'active' : ''}`;
   document.getElementById('tabRegister').className = `auth-tab ${mode === 'register' ? 'active' : ''}`;
   document.getElementById('authSubmitBtn').innerText = mode === 'login' ? 'Entrar' : 'Criar Conta';
+  showNotice('authNotice', '', '');
+}
+
+function showNotice(elementId, text, type) {
+  const el = document.getElementById(elementId);
+  if (!el) return;
+  if (!text) {
+    el.className = 'modal-notice';
+    el.style.display = 'none';
+  } else {
+    el.innerText = text;
+    el.className = `modal-notice ${type}`;
+    el.style.display = 'block';
+  }
 }
 
 async function handleAuth() {
   const username = document.getElementById('usernameInput')?.value.trim();
   const password = document.getElementById('passwordInput')?.value.trim();
 
-  if (!username || !password) return alert('Preencha o usuário e a senha!');
+  if (!username || !password) return showNotice('authNotice', 'Preencha usuário e senha!', 'error');
 
   const passwordHash = await hashPassword(password);
   const userRef = db.ref('users/' + username);
 
   if (authMode === 'register') {
-    // Verificar se usuário já existe
     userRef.get().then((snapshot) => {
       if (snapshot.exists()) {
-        alert('Este nome de usuário já existe! Escolha outro ou faça login.');
+        showNotice('authNotice', 'Usuário já existe! Tente outro.', 'error');
       } else {
-        userRef.set({ username, passwordHash, createdAt: Date.now() }).then(() => {
+        // Gerar número de telefone aleatório único estilo BR
+        const randomNum = Math.floor(100000000 + Math.random() * 900000000);
+        const autoPhone = `+55 11 9${randomNum}`;
+
+        const newUser = {
+          username: username,
+          passwordHash: passwordHash,
+          phone: autoPhone,
+          avatar: `https://ui-avatars.com/api/?name=${username}&background=00a884&color=fff`,
+          createdAt: Date.now()
+        };
+
+        userRef.set(newUser).then(() => {
           localStorage.setItem('zap_user', username);
           currentUser = username;
           initApp();
@@ -97,18 +146,17 @@ async function handleAuth() {
       }
     });
   } else {
-    // Autenticar Login
     userRef.get().then((snapshot) => {
       if (!snapshot.exists()) {
-        alert('Usuário não encontrado! Crie uma conta primeiro.');
+        showNotice('authNotice', 'Usuário não encontrado!', 'error');
       } else {
-        const userData = snapshot.val();
-        if (userData.passwordHash === passwordHash) {
+        const val = snapshot.val();
+        if (val.passwordHash === passwordHash) {
           localStorage.setItem('zap_user', username);
           currentUser = username;
           initApp();
         } else {
-          alert('Senha incorreta!');
+          showNotice('authNotice', 'Senha incorreta!', 'error');
         }
       }
     });
@@ -122,80 +170,186 @@ function logout() {
 
 function initApp() {
   document.getElementById('authScreen').style.display = 'none';
-  document.getElementById('myAccountName').innerText = currentUser;
-  document.getElementById('myAvatarHeader').innerText = currentUser[0].toUpperCase();
-  loadUsers();
-  openChat('geral', 'Grupo Geral', 'group');
+  
+  // Carrega perfil
+  db.ref('users/' + currentUser).on('value', (snapshot) => {
+    userData = snapshot.val();
+    if (userData) {
+      document.getElementById('myAccountName').innerText = userData.username;
+      const avatarUrl = userData.avatar || `https://ui-avatars.com/api/?name=${userData.username}&background=00a884&color=fff`;
+      document.getElementById('myHeaderAvatar').src = avatarUrl;
+      document.getElementById('settingsAvatarPreview').src = avatarUrl;
+      document.getElementById('settingsUsername').value = userData.username;
+      document.getElementById('settingsPhone').value = userData.phone || '';
+    }
+  });
+
+  loadMyPrivateContacts();
+  openChat('geral', 'Grupo Geral', 'group', '');
 }
 
-function loadUsers() {
-  db.ref('users').on('value', (snapshot) => {
-    const usersContainer = document.getElementById('dynamicUsers');
-    if (!usersContainer) return;
-    usersContainer.innerHTML = '';
+// Carrega apenas a lista de contatos do próprio usuário
+function loadMyPrivateContacts() {
+  db.ref('my_contacts/' + currentUser).on('value', (snapshot) => {
+    const container = document.getElementById('privateContactsList');
+    if (!container) return;
+    container.innerHTML = '';
 
     snapshot.forEach((child) => {
-      const user = child.val();
-      if (user.username !== currentUser) {
-        usersContainer.innerHTML += `
-          <div class="contact-item" onclick="openChat('user_${user.username}', '${user.username}', 'user')">
-            <div class="avatar">${user.username[0].toUpperCase()}</div>
-            <div class="contact-info">
-              <div class="name">${user.username}</div>
-              <div class="sub">Conversa Criptografada</div>
+      const contactName = child.key;
+      db.ref('users/' + contactName).get().then((uSnap) => {
+        if (uSnap.exists()) {
+          const uData = uSnap.val();
+          const avatarUrl = uData.avatar || `https://ui-avatars.com/api/?name=${uData.username}&background=00a884&color=fff`;
+          
+          container.innerHTML += `
+            <div class="contact-item contact-entry" data-name="${uData.username.toLowerCase()}" onclick="openChat('private_${getPrivateChatId(currentUser, uData.username)}', '${uData.username}', 'user', '${avatarUrl}')">
+              <img class="contact-avatar-img" src="${avatarUrl}">
+              <div class="contact-info">
+                <div class="name">${uData.username}</div>
+                <div class="sub">${uData.phone || 'Conversa segura'}</div>
+              </div>
             </div>
-          </div>
-        `;
-      }
+          `;
+        }
+      });
     });
   });
 }
 
-function openChat(chatId, title, avatarType) {
+function getPrivateChatId(user1, user2) {
+  return [user1, user2].sort().join('_');
+}
+
+function openModal(modalId) {
+  document.getElementById(modalId)?.classList.remove('hidden');
+  showNotice('settingsNotice', '', '');
+  showNotice('addContactNotice', '', '');
+}
+
+function closeModal(modalId) {
+  document.getElementById(modalId)?.classList.add('hidden');
+}
+
+function previewProfilePhoto(event) {
+  const file = event.target.files[0];
+  if (file) {
+    compressImage(file, 200, (base64) => {
+      pendingAvatarBase64 = base64;
+      document.getElementById('settingsAvatarPreview').src = base64;
+    });
+  }
+}
+
+function saveSettings() {
+  const phone = document.getElementById('settingsPhone')?.value.trim();
+  const updates = {};
+  if (phone) updates.phone = phone;
+  if (pendingAvatarBase64) updates.avatar = pendingAvatarBase64;
+
+  db.ref('users/' + currentUser).update(updates).then(() => {
+    showNotice('settingsNotice', 'Perfil atualizado com sucesso!', 'success');
+    setTimeout(() => closeModal('settingsModal'), 1200);
+  });
+}
+
+function addContact() {
+  const input = document.getElementById('addContactInput')?.value.trim();
+  if (!input) return showNotice('addContactNotice', 'Digite um usuário ou telefone!', 'error');
+
+  if (input === currentUser) return showNotice('addContactNotice', 'Você não pode adicionar a si mesmo!', 'error');
+
+  // Buscar por Usuário ou por Telefone
+  db.ref('users').get().then((snapshot) => {
+    let foundUsername = null;
+
+    snapshot.forEach((child) => {
+      const u = child.val();
+      if (u.username === input || u.phone === input) {
+        foundUsername = u.username;
+      }
+    });
+
+    if (foundUsername) {
+      // Adiciona o contato para o usuário
+      db.ref(`my_contacts/${currentUser}/${foundUsername}`).set(true);
+      db.ref(`my_contacts/${foundUsername}/${currentUser}`).set(true);
+      showNotice('addContactNotice', `Contato ${foundUsername} adicionado!`, 'success');
+      setTimeout(() => {
+        closeModal('addContactModal');
+        document.getElementById('addContactInput').value = '';
+      }, 1000);
+    } else {
+      showNotice('addContactNotice', 'Contato não encontrado!', 'error');
+    }
+  });
+}
+
+function filterContacts() {
+  const query = document.getElementById('searchContactsInput')?.value.toLowerCase() || '';
+  const entries = document.querySelectorAll('.contact-entry');
+  entries.forEach(entry => {
+    const name = entry.getAttribute('data-name') || '';
+    if (name.includes(query)) {
+      entry.style.display = 'flex';
+    } else {
+      entry.style.display = 'none';
+    }
+  });
+}
+
+function openChat(chatId, title, avatarType, avatarUrl) {
   activeChatId = chatId;
   document.getElementById('activeChatTitle').innerText = title;
   
-  const avatarEl = document.getElementById('activeAvatar');
-  if (avatarType === 'bot') avatarEl.innerText = '🤖';
-  else if (avatarType === 'group') avatarEl.innerText = '👥';
-  else avatarEl.innerText = title[0].toUpperCase();
+  const avatarImg = document.getElementById('activeChatAvatar');
+  if (avatarUrl) {
+    avatarImg.src = avatarUrl;
+  } else if (avatarType === 'bot') {
+    avatarImg.src = 'https://ui-avatars.com/api/?name=Bot&background=00a884&color=fff';
+  } else {
+    avatarImg.src = 'https://ui-avatars.com/api/?name=Geral&background=007a65&color=fff';
+  }
 
   document.getElementById('contactsPanel').classList.add('hidden');
   document.getElementById('chatPanel').classList.remove('hidden');
 
   const box = document.getElementById('messagesBox');
-  box.innerHTML = `
-    <div class="encryption-banner">
-      🔒 As mensagens são protegidas com criptografia de ponta a ponta.
-    </div>
-  `;
+  box.innerHTML = `<div class="encryption-banner">🔒 As mensagens são protegidas com criptografia de ponta a ponta.</div>`;
 
   if (activeListener) activeListener.off();
 
   const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
   activeListener = db.ref(chatPath);
-  
+
   activeListener.on('child_added', (snapshot) => {
     const msg = snapshot.val();
     const isMe = msg.author === currentUser;
     const decryptedText = decryptText(msg.text);
-    
-    // Formata o horário exato (ex: 14:32)
     const date = msg.timestamp ? new Date(msg.timestamp) : new Date();
     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const msgDiv = document.createElement('div');
     msgDiv.className = `msg ${isMe ? 'sent' : 'received'}`;
-    
+
+    let contentHtml = '';
+    if (msg.image) {
+      const decryptedImg = decryptText(msg.image);
+      contentHtml += `<img class="msg-img" src="${decryptedImg}">`;
+    }
+    if (decryptedText) {
+      contentHtml += `<div>${decryptedText}</div>`;
+    }
+
     msgDiv.innerHTML = `
       ${!isMe ? `<span class="author">${msg.author}</span>` : ''}
-      <div>${decryptedText}</div>
+      ${contentHtml}
       <div class="msg-footer">
         <span class="time">${timeStr}</span>
         ${isMe ? '<span class="checks">✓✓</span>' : ''}
       </div>
     `;
-    
+
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
   });
@@ -211,28 +365,43 @@ function sendMessage() {
   const rawText = textInput?.value.trim() || '';
 
   if (rawText !== '') {
-    // CRIPTOGRAFA A MENSAGEM ANTES DE MANDAR PRO FIREBASE
-    const encryptedText = encryptText(rawText);
-    const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
-    const chatRef = db.ref(chatPath);
+    dispatchMessage(rawText, null);
+    textInput.value = '';
+  }
+}
 
-    chatRef.push({
-      author: currentUser,
-      text: encryptedText,
-      timestamp: Date.now()
-    }).then(() => {
-      textInput.value = '';
-
-      // BOT SERVER RESPONDER PONG CRIPTOGRAFADO
-      if (activeChatId === 'server') {
-        setTimeout(() => {
-          chatRef.push({
-            author: 'Server 🤖',
-            text: encryptText('Pong 🏓'),
-            timestamp: Date.now()
-          });
-        }, 600);
-      }
+function sendPhotoInChat(event) {
+  const file = event.target.files[0];
+  if (file) {
+    compressImage(file, 600, (base64Img) => {
+      dispatchMessage('', base64Img);
     });
   }
+}
+
+function dispatchMessage(text, imageBase64) {
+  const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
+  const chatRef = db.ref(chatPath);
+
+  const payload = {
+    author: currentUser,
+    text: encryptText(text),
+    timestamp: Date.now()
+  };
+
+  if (imageBase64) {
+    payload.image = encryptText(imageBase64);
+  }
+
+  chatRef.push(payload).then(() => {
+    if (activeChatId === 'server') {
+      setTimeout(() => {
+        chatRef.push({
+          author: 'Server 🤖',
+          text: encryptText('Pong 🏓'),
+          timestamp: Date.now()
+        });
+      }, 600);
+    }
+  });
 }

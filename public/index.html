@@ -8,27 +8,73 @@
 </head>
 <body>
 
-  <div class="chat-container">
-    <div class="header">
-      <div class="header-info">
+  <div class="app-wrapper">
+
+    <!-- TELA 1: CADASTRO / LOGIN -->
+    <div class="auth-screen" id="authScreen">
+      <div class="auth-card">
         <h2>Zap Clone 💬</h2>
-        <span class="status">● online em tempo real</span>
-      </div>
-      <div class="user-input-group">
-        <input type="text" id="username" placeholder="Seu nome" value="User1">
+        <p>Crie sua conta para entrar no chat</p>
+        <input type="text" id="usernameInput" placeholder="Digite seu nome de usuário" autocomplete="off">
+        <button onclick="registerOrLogin()">Entrar / Cadastrar</button>
       </div>
     </div>
 
-    <div class="messages" id="messagesBox"></div>
+    <!-- TELA 2: LISTA DE CONTATOS (SIDEBAR) -->
+    <div class="contacts-panel" id="contactsPanel">
+      <div class="user-header">
+        <span class="my-name" id="myAccountName">Usuário</span>
+        <button class="logout-btn" onclick="logout()">Sair</button>
+      </div>
+      <div class="contacts-list" id="contactsList">
+        
+        <!-- Contato Bot Server -->
+        <div class="contact-item" onclick="openChat('server', 'Server Bot', 'bot')">
+          <div class="avatar bot">🤖</div>
+          <div class="contact-info">
+            <div class="name">Server (Bot Teste)</div>
+            <div class="sub">Responde "Pong" automaticamente</div>
+          </div>
+        </div>
 
-    <div class="footer">
-      <input type="text" id="messageText" placeholder="Mensagem..." autocomplete="off">
-      <button onclick="sendMessage()" id="sendBtn">
-        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
-        </svg>
-      </button>
+        <!-- Contato Grupo Geral -->
+        <div class="contact-item" onclick="openChat('geral', 'Grupo Geral', 'group')">
+          <div class="avatar group">👥</div>
+          <div class="contact-info">
+            <div class="name">Grupo Geral</div>
+            <div class="sub">Chat público em tempo real</div>
+          </div>
+        </div>
+
+        <!-- Outros Usuários do Firebase entram aqui dinamicamente -->
+        <div id="dynamicUsers"></div>
+
+      </div>
     </div>
+
+    <!-- TELA 3: JANELA DE CHAT -->
+    <div class="chat-panel hidden" id="chatPanel">
+      <div class="chat-header">
+        <button class="back-btn" onclick="closeChat()">←</button>
+        <div class="avatar" id="activeAvatar">💬</div>
+        <div>
+          <div style="font-weight: bold;" id="activeChatTitle">Selecione uma conversa</div>
+          <div style="font-size: 11px; color: #00a884;">online</div>
+        </div>
+      </div>
+
+      <div class="messages-box" id="messagesBox"></div>
+
+      <div class="chat-footer">
+        <input type="text" id="messageText" placeholder="Mensagem..." autocomplete="off">
+        <button onclick="sendMessage()">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
   </div>
 
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>

@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Zap Clone - Firebase</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="chat-container">
+    <div class="header">
+      <h2>Zap Clone 💬</h2>
+      <div>
+        <label style="font-size: 12px;">Seu Nome: </label>
+        <input type="text" id="username" value="Usuário1">
+      </div>
+    </div>
+
+    <div class="messages" id="messagesBox"></div>
+
+    <div class="footer">
+      <input type="text" id="messageText" placeholder="Digite uma mensagem...">
+      <button onclick="sendMessage()">Enviar</button>
+    </div>
+  </div>
+
+  <!-- Firebase Web SDK (Compat Mode v10) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+  
+  <!-- Script da aplicação -->
+  <script src="app.js"></script>
+</body>
+</html>

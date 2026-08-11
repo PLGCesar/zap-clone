@@ -24,18 +24,14 @@ let activeListener = null;
 let pendingAvatarBase64 = null;
 let botAvatarUrl = 'https://ui-avatars.com/api/?name=Bot&background=00a884&color=fff';
 
+let selectedMsgData = null;
+let activeReplyData = null;
+
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
 let recordTimerInterval = null;
 let recordSeconds = 0;
-
-function formatBytes(bytes) {
-  if (!bytes) return '0 B';
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
-  return (bytes / 1048576).toFixed(1) + ' MB';
-}
 
 function censorPhone(phone) {
   if (!phone) return 'Telefone não informado';
@@ -467,6 +463,139 @@ function filterContacts() {
   });
 }
 
+// MENU DE AÇÕES DA MENSAGEM (2 CLIQUES / 2 TOQUES)
+function openMsgActions(ds) {
+  selectedMsgData = ds;
+  const isMe = ds.isMe === 'true';
+  const body = document.getElementById('msgActionsBody');
+  if (!body) return;
+
+  if (isMe) {
+    body.innerHTML = `
+      <button class="modal-btn danger" onclick="deleteMsgForEveryone()">🚫 Apagar para Todos</button>
+      <button class="modal-btn secondary" onclick="deleteMsgForMe()">👁️ Apagar para Mim</button>
+      ${ds.hasText === 'true' ? `<button class="modal-btn secondary" onclick="editMsgText()">✏️ Editar Mensagem</button>` : ''}
+    `;
+  } else {
+    body.innerHTML = `
+      <button class="modal-btn" onclick="setupReplyToMsg()">↩️ Responder</button>
+      <button class="modal-btn secondary" onclick="openForwardModal()">↗️ Encaminhar Mensagem</button>
+    `;
+  }
+
+  openModal('msgActionsModal');
+}
+
+function deleteMsgForEveryone() {
+  if (!selectedMsgData) return;
+  db.ref(`${selectedMsgData.chatPath}/${selectedMsgData.key}`).update({
+    text: encryptText('🚫 Esta mensagem foi apagada'),
+    image: null,
+    audio: null,
+    file: null,
+    deleted: true
+  }).then(() => closeModal('msgActionsModal'));
+}
+
+function deleteMsgForMe() {
+  if (!selectedMsgData) return;
+  db.ref(`hidden_msgs/${currentUser}/${selectedMsgData.key}`).set(true).then(() => {
+    const el = document.getElementById('msg_' + selectedMsgData.key);
+    if (el) el.remove();
+    closeModal('msgActionsModal');
+  });
+}
+
+function editMsgText() {
+  if (!selectedMsgData) return;
+  const currentDecrypted = decryptText(selectedMsgData.text);
+  const newText = prompt("Edite sua mensagem:", currentDecrypted);
+  if (newText !== null && newText.trim() !== '') {
+    db.ref(`${selectedMsgData.chatPath}/${selectedMsgData.key}`).update({
+      text: encryptText(newText.trim()),
+      edited: true
+    }).then(() => closeModal('msgActionsModal'));
+  }
+}
+
+function setupReplyToMsg() {
+  if (!selectedMsgData) return;
+  const decryptedText = decryptText(selectedMsgData.text) || (selectedMsgData.hasImage === 'true' ? '📷 Foto' : selectedMsgData.hasAudio === 'true' ? '🎙️ Áudio' : '📄 Documento');
+  
+  activeReplyData = {
+    key: selectedMsgData.key,
+    author: selectedMsgData.author,
+    text: decryptedText
+  };
+
+  document.getElementById('replyAuthorText').innerText = `Respondendo a ${selectedMsgData.author}`;
+  document.getElementById('replyMessageText').innerText = decryptedText;
+  document.getElementById('replyPreviewBanner').style.display = 'flex';
+  
+  closeModal('msgActionsModal');
+  document.getElementById('messageText')?.focus();
+}
+
+function cancelReply() {
+  activeReplyData = null;
+  document.getElementById('replyPreviewBanner').style.display = 'none';
+}
+
+function openForwardModal() {
+  if (!selectedMsgData) return;
+  closeModal('msgActionsModal');
+  openModal('forwardModal');
+
+  const container = document.getElementById('forwardContactsList');
+  if (!container) return;
+  container.innerHTML = '<p style="font-size:13px; color:#8696a0; text-align:center;">Carregando contatos...</p>';
+
+  db.ref('my_contacts/' + currentUser).get().then((snap) => {
+    container.innerHTML = `
+      <div class="contact-item" onclick="forwardToTarget('geral', 'Grupo Geral')">
+        <div class="avatar group">👥</div>
+        <div class="contact-info"><div class="name">Grupo Geral</div></div>
+      </div>
+    `;
+
+    snap.forEach((child) => {
+      const contactName = child.key;
+      db.ref('users/' + contactName).get().then((uSnap) => {
+        if (uSnap.exists()) {
+          const u = uSnap.val();
+          const shownName = u.displayName || u.username;
+          container.innerHTML += `
+            <div class="contact-item" onclick="forwardToTarget('private_${getPrivateChatId(currentUser, u.username)}', '${shownName}')">
+              <div class="avatar">${shownName[0].toUpperCase()}</div>
+              <div class="contact-info"><div class="name">${shownName}</div></div>
+            </div>
+          `;
+        }
+      });
+    });
+  });
+}
+
+function forwardToTarget(targetChatId, targetTitle) {
+  if (!selectedMsgData) return;
+  const targetPath = targetChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${targetChatId}`;
+  
+  const payload = {
+    author: currentUser,
+    authorDisplayName: userData?.displayName || currentUser,
+    text: selectedMsgData.text || '',
+    image: selectedMsgData.image || null,
+    audio: selectedMsgData.audio || null,
+    file: selectedMsgData.file ? JSON.parse(selectedMsgData.file) : null,
+    timestamp: Date.now()
+  };
+
+  db.ref(targetPath).push(payload).then(() => {
+    closeModal('forwardModal');
+    alert(`Mensagem encaminhada para ${targetTitle}!`);
+  });
+}
+
 // PLAYER DE ÁUDIO
 function toggleVoicePlay(audioId, btn) {
   const audio = document.getElementById(audioId);
@@ -545,6 +674,7 @@ function formatAudioTime(secs) {
 function openChat(chatId, title, avatarType, avatarUrl) {
   activeChatId = chatId;
   document.getElementById('activeChatTitle').innerText = title;
+  cancelReply();
   
   const avatarImg = document.getElementById('activeChatAvatar');
   if (avatarUrl) {
@@ -571,7 +701,16 @@ function openChat(chatId, title, avatarType, avatarUrl) {
   const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
   activeListener = db.ref(chatPath);
 
+  // Escutar mensagens escondidas pelo "Apagar para mim"
+  let hiddenMsgsMap = {};
+  db.ref(`hidden_msgs/${currentUser}`).get().then((hSnap) => {
+    if (hSnap.exists()) hiddenMsgsMap = hSnap.val();
+  });
+
   activeListener.on('child_added', (snapshot) => {
+    const msgKey = snapshot.key;
+    if (hiddenMsgsMap[msgKey]) return; // Ignora mensagem apagada para mim
+
     const msg = snapshot.val();
     const isMe = msg.author === currentUser;
     const decryptedText = decryptText(msg.text);
@@ -579,17 +718,50 @@ function openChat(chatId, title, avatarType, avatarUrl) {
     const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
     const msgDiv = document.createElement('div');
+    msgDiv.id = 'msg_' + msgKey;
     msgDiv.className = `msg ${isMe ? 'sent' : 'received'}`;
 
+    // DATASET PARA AÇÕES DE 2 CLIQUES / TOUCH
+    msgDiv.dataset.key = msgKey;
+    msgDiv.dataset.isMe = isMe;
+    msgDiv.dataset.text = msg.text || '';
+    msgDiv.dataset.author = msg.authorDisplayName || msg.author;
+    msgDiv.dataset.hasText = decryptedText ? 'true' : 'false';
+    msgDiv.dataset.hasImage = msg.image ? 'true' : 'false';
+    msgDiv.dataset.hasAudio = msg.audio ? 'true' : 'false';
+    msgDiv.dataset.chatPath = chatPath;
+    if (msg.file) msgDiv.dataset.file = JSON.stringify(msg.file);
+
+    // GATILHO DE DUPLO CLIQUE / DUPLO TOQUE NO CELULAR
+    msgDiv.ondblclick = function() { openMsgActions(this.dataset); };
+    let lastTap = 0;
+    msgDiv.addEventListener('touchend', function(e) {
+      const now = new Date().getTime();
+      const diff = now - lastTap;
+      if (diff < 300 && diff > 0) {
+        openMsgActions(this.dataset);
+        e.preventDefault();
+      }
+      lastTap = now;
+    });
+
     let contentHtml = '';
+
+    // CITAÇÃO DE RESPOSTA
+    if (msg.replyTo) {
+      contentHtml += `
+        <div class="quoted-msg-box">
+          <div class="quoted-msg-author">${msg.replyTo.author}</div>
+          <div>${msg.replyTo.text}</div>
+        </div>
+      `;
+    }
     
-    // RENDERIZAÇÃO DE IMAGEM
     if (msg.image) {
       const decryptedImg = decryptText(msg.image);
       contentHtml += `<img class="msg-img" src="${decryptedImg}">`;
     }
     
-    // RENDERIZAÇÃO DE DOCUMENTO / ARQUIVO
     if (msg.file) {
       const decryptedName = decryptText(msg.file.name);
       const decryptedSize = decryptText(msg.file.size);
@@ -609,7 +781,6 @@ function openChat(chatId, title, avatarType, avatarUrl) {
       `;
     }
 
-    // RENDERIZAÇÃO DE ÁUDIO
     if (msg.audio) {
       const decryptedAudio = decryptText(msg.audio);
       const uniqueAudId = 'aud_' + Math.random().toString(36).substr(2, 9);
@@ -649,6 +820,7 @@ function openChat(chatId, title, avatarType, avatarUrl) {
       ${!isMe ? `<span class="author">${authorNameToShow}</span>` : ''}
       ${contentHtml}
       <div class="msg-footer">
+        ${msg.edited ? '<span class="edited-tag">(editada)</span>' : ''}
         <span class="time">${timeStr}</span>
         ${isMe ? `<span class="checks">${checkSvg}</span>` : ''}
       </div>
@@ -656,6 +828,14 @@ function openChat(chatId, title, avatarType, avatarUrl) {
 
     box.appendChild(msgDiv);
     box.scrollTop = box.scrollHeight;
+  });
+
+  // Atualizar mensagens alteradas (como edição ou apagar)
+  activeListener.on('child_changed', (snapshot) => {
+    const el = document.getElementById('msg_' + snapshot.key);
+    if (el) {
+      openChat(activeChatId, document.getElementById('activeChatTitle').innerText, '', '');
+    }
   });
 }
 
@@ -714,21 +894,18 @@ async function toggleAudioRecording() {
   }
 }
 
-// FUNÇÃO DE ENVIAR ARQUIVO / DOCUMENTO
 function sendFileInChat(event) {
   const file = event.target.files[0];
   if (!file) return;
 
   const isExempt = (currentUser === 'root' || userData?.filePermission === true);
 
-  // 1. Checagem de Tamanho (500KB)
   if (!isExempt && file.size > 500 * 1024) {
-    alert("⚠️ Arquivo muito grande! O limite para usuários padrão é 500KB. Peça permissão ao usuário root para enviar arquivos maiores.");
+    alert("⚠️ Arquivo muito grande! O limite para usuários padrão é 500KB.");
     event.target.value = '';
     return;
   }
 
-  // 2. Checagem de Intervalo de Tempo (3 Minutos)
   const lastFileTime = parseInt(localStorage.getItem('last_file_send_time') || '0', 10);
   const now = Date.now();
   const threeMinutes = 3 * 60 * 1000;
@@ -737,7 +914,7 @@ function sendFileInChat(event) {
     const remainingSecs = Math.ceil((threeMinutes - (now - lastFileTime)) / 1000);
     const mins = Math.floor(remainingSecs / 60);
     const secs = remainingSecs % 60;
-    alert(`⏱️ Por favor, aguarde ${mins}m ${secs}s para enviar outro arquivo.`);
+    alert(`⏱️ Aguarde ${mins}m ${secs}s para enviar outro arquivo.`);
     event.target.value = '';
     return;
   }
@@ -791,6 +968,10 @@ function dispatchMessage(text, imageBase64, audioBase64, fileObj) {
     timestamp: Date.now()
   };
 
+  if (activeReplyData) {
+    payload.replyTo = activeReplyData;
+  }
+
   if (imageBase64) payload.image = encryptText(imageBase64);
   if (audioBase64) payload.audio = encryptText(audioBase64);
   if (fileObj) {
@@ -802,6 +983,7 @@ function dispatchMessage(text, imageBase64, audioBase64, fileObj) {
   }
 
   chatRef.push(payload).then(() => {
+    cancelReply();
     if (activeChatId === 'server') {
       setTimeout(() => {
         chatRef.push({

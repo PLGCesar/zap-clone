@@ -161,17 +161,32 @@
 
         <button class="modal-btn" onclick="saveSettings()">Salvar Alterações</button>
 
+        <!-- FERRAMENTAS EXCLUSIVAS DO ROOT -->
         <div id="rootBotAvatarSection" style="display:none; margin-top:16px; border-top:1px solid #2a3942; padding-top:12px;">
           <label style="color:#00a884; font-weight:bold;">🤖 Mudar Foto do Server Bot (Exclusivo Root):</label>
           <button style="background:#202c33; color:#00a884; border:1px solid #00a884; padding:8px; width:100%; border-radius:6px; margin-top:6px; cursor:pointer;" onclick="document.getElementById('botAvatarFileInput').click()">Selecionar Foto do Bot</button>
           <input type="file" id="botAvatarFileInput" accept="image/*" style="display:none;" onchange="changeBotAvatarByRoot(event)">
+          
+          <button style="background:#202c33; color:#53bdeb; border:1px solid #53bdeb; padding:10px; width:100%; border-radius:6px; margin-top:12px; cursor:pointer; font-weight:bold;" onclick="openAdminUsersModal()">👥 Ver Lista de Todos os Usuários</button>
         </div>
 
-        <div id="adminDangerZone" style="display:none; margin-top:20px; border-top:1px solid #ea4335; padding-top:14px;">
-          <h4 style="color:#ea4335; font-size:14px;">⚡ Painel do Administrador (Root)</h4>
-          <p style="font-size:12px; color:#8696a0; margin: 6px 0;">Apaga todas as conversas e contas de todo mundo:</p>
+        <div id="adminDangerZone" style="display:none; margin-top:16px; border-top:1px solid #ea4335; padding-top:12px;">
+          <h4 style="color:#ea4335; font-size:14px;">⚡ Painel de Perigo (Root)</h4>
           <button class="modal-btn danger" onclick="wipeAllSystemData()">🔥 DELETAR TODOS OS DADOS DO SISTEMA</button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL ADMIN: LISTA DE TODOS OS USUÁRIOS DO SISTEMA -->
+  <div class="modal-overlay hidden" id="adminUsersModal">
+    <div class="modal-card" style="max-width: 460px;">
+      <div class="modal-header">
+        <h3>👥 Usuários Cadastrados</h3>
+        <button class="modal-close" onclick="closeModal('adminUsersModal')">✕</button>
+      </div>
+      <div class="modal-body" style="max-height: 380px; overflow-y: auto;">
+        <div id="adminUsersListContainer"></div>
       </div>
     </div>
   </div>

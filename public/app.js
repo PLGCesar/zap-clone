@@ -30,6 +30,14 @@ let isRecording = false;
 let recordTimerInterval = null;
 let recordSeconds = 0;
 
+function censorPhone(phone) {
+  if (!phone) return 'Telefone não informado';
+  if (phone.length < 8) return '****';
+  const prefix = phone.slice(0, 6);
+  const lastFour = phone.slice(-4);
+  return `${prefix} *****-${lastFour}`;
+}
+
 function encryptText(str) {
   if (!str) return '';
   let res = '';
@@ -140,7 +148,6 @@ async function handleAuth() {
 
   const passwordHash = await hashPassword(password);
 
-  // ROOT LOGIN (SEM SOBRESCREVER A FOTO)
   if (username === 'root') {
     if (passwordHash === window.ROOT_HASH) {
       db.ref('users/root').get().then((snap) => {
@@ -248,6 +255,40 @@ function initApp() {
   openChat('geral', 'Grupo Geral', 'group', '');
 }
 
+function openAdminUsersModal() {
+  if (currentUser !== 'root') return;
+  openModal('adminUsersModal');
+  
+  const container = document.getElementById('adminUsersListContainer');
+  if (!container) return;
+  container.innerHTML = '<p style="font-size:13px; color:#8696a0; text-align:center;">Carregando usuários...</p>';
+
+  db.ref('users').get().then((snapshot) => {
+    container.innerHTML = '';
+    snapshot.forEach((child) => {
+      const u = child.val();
+      const shownName = u.displayName || u.username;
+      const avatarUrl = u.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shownName)}&background=00a884&color=fff`;
+      const censored = censorPhone(u.phone);
+
+      container.innerHTML += `
+        <div class="admin-user-item">
+          <img class="admin-user-avatar" src="${avatarUrl}">
+          <div class="admin-user-info">
+            <div class="disp-name">${shownName}</div>
+            <div class="user-name">@${u.username}</div>
+            <div class="user-phone">📞 ${censored}</div>
+          </div>
+          ${u.username !== 'root' ? `
+            <button class="delete-user-btn" title="Apagar Conta" onclick="deleteAccount('${u.username}')">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </button>` : ''}
+        </div>
+      `;
+    });
+  });
+}
+
 function changeBotAvatarByRoot(event) {
   if (currentUser !== 'root') return;
   const file = event.target.files[0];
@@ -283,7 +324,7 @@ function loadMyPrivateContacts() {
               <img class="contact-avatar-img" src="${avatarUrl}">
               <div class="contact-info">
                 <div class="name">${shownName}</div>
-                <div class="sub">@${uData.username} • ${uData.phone || ''}</div>
+                <div class="sub">@${uData.username} • ${censorPhone(uData.phone)}</div>
               </div>
               ${deleteBtnHtml}
             </div>
@@ -299,7 +340,9 @@ function deleteAccount(targetUsername) {
   if (confirm(`Tem certeza que deseja apagar permanentemente a conta de ${targetUsername}?`)) {
     db.ref('users/' + targetUsername).remove();
     db.ref('my_contacts/' + targetUsername).remove();
-    db.ref('my_contacts/' + currentUser + '/' + targetUsername).remove();
+    db.ref('my_contacts/' + currentUser + '/' + targetUsername).remove().then(() => {
+      openAdminUsersModal();
+    });
   }
 }
 

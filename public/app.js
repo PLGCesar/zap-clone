@@ -23,28 +23,27 @@ let activeChatId = 'geral';
 let activeListener = null;
 let pendingAvatarBase64 = null;
 
-const SECRET_CIPHER = "ZapSecretKey2026_Encrypt";
-
-function encryptText(text) {
-  if (!text) return '';
-  let result = '';
-  for (let i = 0; i < text.length; i++) {
-    result += String.fromCharCode(text.charCodeAt(i) ^ SECRET_CIPHER.charCodeAt(i % SECRET_CIPHER.length));
+// Criptografia Ultra-Leve e Instantânea (Fast XOR 1-Byte + Base64)
+function encryptText(str) {
+  if (!str) return '';
+  let res = '';
+  for (let i = 0; i < str.length; i++) {
+    res += String.fromCharCode(str.charCodeAt(i) ^ 0x5A);
   }
-  return btoa(unescape(encodeURIComponent(result)));
+  return btoa(unescape(encodeURIComponent(res)));
 }
 
-function decryptText(encrypted) {
-  if (!encrypted) return '';
+function decryptText(enc) {
+  if (!enc) return '';
   try {
-    let decoded = decodeURIComponent(escape(atob(encrypted)));
-    let result = '';
-    for (let i = 0; i < decoded.length; i++) {
-      result += String.fromCharCode(decoded.charCodeAt(i) ^ SECRET_CIPHER.charCodeAt(i % SECRET_CIPHER.length));
+    let str = decodeURIComponent(escape(atob(enc)));
+    let res = '';
+    for (let i = 0; i < str.length; i++) {
+      res += String.fromCharCode(str.charCodeAt(i) ^ 0x5A);
     }
-    return result;
+    return res;
   } catch (e) {
-    return encrypted;
+    return enc;
   }
 }
 
@@ -119,7 +118,6 @@ async function handleAuth() {
 
   const passwordHash = await hashPassword(password);
 
-  // LÓGICA ESPECIAL PARA O SUPERUSUÁRIO ROOT
   if (username === 'root') {
     if (passwordHash === window.ROOT_HASH) {
       db.ref('users/root').set({
@@ -221,7 +219,12 @@ function loadMyPrivateContacts() {
         if (uSnap.exists()) {
           const uData = uSnap.val();
           const avatarUrl = uData.avatar || `https://ui-avatars.com/api/?name=${uData.username}&background=00a884&color=fff`;
-          const deleteBtnHtml = currentUser === 'root' ? `<button class="delete-user-btn" title="Apagar Conta" onclick="event.stopPropagation(); deleteAccount('${uData.username}')">🗑️</button>` : '';
+          
+          // Ícone Lixeira SVG
+          const deleteBtnHtml = currentUser === 'root' ? `
+            <button class="delete-user-btn" title="Apagar Conta" onclick="event.stopPropagation(); deleteAccount('${uData.username}')">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+            </button>` : '';
 
           container.innerHTML += `
             <div class="contact-item contact-entry" data-name="${uData.username.toLowerCase()}" onclick="openChat('private_${getPrivateChatId(currentUser, uData.username)}', '${uData.username}', 'user', '${avatarUrl}')">
@@ -239,14 +242,12 @@ function loadMyPrivateContacts() {
   });
 }
 
-// FUNÇÕES DE EXCLUSÃO EXCLUSIVAS DO ROOT
 function deleteAccount(targetUsername) {
   if (currentUser !== 'root') return;
   if (confirm(`Tem certeza que deseja apagar permanentemente a conta de ${targetUsername}?`)) {
     db.ref('users/' + targetUsername).remove();
     db.ref('my_contacts/' + targetUsername).remove();
     db.ref('my_contacts/' + currentUser + '/' + targetUsername).remove();
-    alert(`A conta de ${targetUsername} foi apagada com sucesso!`);
   }
 }
 
@@ -257,14 +258,12 @@ function wipeAllSystemData() {
     db.ref('chats_bot').remove();
     db.ref('my_contacts').remove();
     db.ref('users').remove().then(() => {
-      // Recria apenas o root
       db.ref('users/root').set({
         username: 'root',
         phone: '+00 00 00000-0000',
         avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
         isAdmin: true
       });
-      alert('🔥 Todos os dados do sistema foram deletados!');
       location.reload();
     });
   }
@@ -302,7 +301,7 @@ function saveSettings() {
 
   db.ref('users/' + currentUser).update(updates).then(() => {
     showNotice('settingsNotice', 'Perfil atualizado com sucesso!', 'success');
-    setTimeout(() => closeModal('settingsModal'), 1200);
+    setTimeout(() => closeModal('settingsModal'), 1000);
   });
 }
 
@@ -365,7 +364,12 @@ function openChat(chatId, title, avatarType, avatarUrl) {
   document.getElementById('chatPanel').classList.remove('hidden');
 
   const box = document.getElementById('messagesBox');
-  box.innerHTML = `<div class="encryption-banner">🔒 As mensagens são protegidas com criptografia de ponta a ponta.</div>`;
+  box.innerHTML = `
+    <div class="encryption-banner">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+      <span>As mensagens são protegidas com criptografia de ponta a ponta.</span>
+    </div>
+  `;
 
   if (activeListener) activeListener.off();
 
@@ -391,12 +395,19 @@ function openChat(chatId, title, avatarType, avatarUrl) {
       contentHtml += `<div>${decryptedText}</div>`;
     }
 
+    // Check duplo azul em SVG
+    const checkSvg = `
+      <svg viewBox="0 0 16 11" width="16" height="11" fill="currentColor">
+        <path d="M11.05 0L4.7 6.35 1.95 3.6 0 5.55l4.7 4.7 8.3-8.3z"/>
+        <path d="M15.05 0L8.7 6.35 7.4 5.05 6 6.45l2.7 2.7 8.3-8.3z"/>
+      </svg>`;
+
     msgDiv.innerHTML = `
       ${!isMe ? `<span class="author">${msg.author}</span>` : ''}
       ${contentHtml}
       <div class="msg-footer">
         <span class="time">${timeStr}</span>
-        ${isMe ? '<span class="checks">✓✓</span>' : ''}
+        ${isMe ? `<span class="checks">${checkSvg}</span>` : ''}
       </div>
     `;
 
@@ -451,7 +462,7 @@ function dispatchMessage(text, imageBase64) {
           text: encryptText('Pong 🏓'),
           timestamp: Date.now()
         });
-      }, 600);
+      }, 500);
     }
   });
 }

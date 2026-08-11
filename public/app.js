@@ -24,7 +24,6 @@ let activeListener = null;
 let pendingAvatarBase64 = null;
 let botAvatarUrl = 'https://ui-avatars.com/api/?name=Bot&background=00a884&color=fff';
 
-// Variáveis de Gravação de Áudio
 let mediaRecorder = null;
 let audioChunks = [];
 let isRecording = false;
@@ -95,7 +94,6 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') sendMessage();
   });
 
-  // Carregar tema de fundo salvo
   const savedBg = localStorage.getItem('zap_bg_theme') || '#0b141a';
   changeBgTheme(savedBg);
   const selectEl = document.getElementById('bgThemeSelect');
@@ -113,6 +111,10 @@ function switchAuthTab(mode) {
   document.getElementById('tabLogin').className = `auth-tab ${mode === 'login' ? 'active' : ''}`;
   document.getElementById('tabRegister').className = `auth-tab ${mode === 'register' ? 'active' : ''}`;
   document.getElementById('authSubmitBtn').innerText = mode === 'login' ? 'Entrar' : 'Criar Conta';
+  
+  const displayInput = document.getElementById('displayNameInput');
+  if (displayInput) displayInput.style.display = mode === 'register' ? 'block' : 'none';
+
   showNotice('authNotice', '', '');
 }
 
@@ -131,19 +133,26 @@ function showNotice(elementId, text, type) {
 
 async function handleAuth() {
   const username = document.getElementById('usernameInput')?.value.trim();
+  const displayName = document.getElementById('displayNameInput')?.value.trim();
   const password = document.getElementById('passwordInput')?.value.trim();
 
   if (!username || !password) return showNotice('authNotice', 'Preencha usuário e senha!', 'error');
 
   const passwordHash = await hashPassword(password);
 
+  // ROOT LOGIN (SEM SOBRESCREVER A FOTO)
   if (username === 'root') {
     if (passwordHash === window.ROOT_HASH) {
-      db.ref('users/root').set({
-        username: 'root',
-        phone: '+00 00 00000-0000',
-        avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
-        isAdmin: true
+      db.ref('users/root').get().then((snap) => {
+        if (!snap.exists()) {
+          db.ref('users/root').set({
+            username: 'root',
+            displayName: 'Root Admin 👑',
+            phone: '+00 00 00000-0000',
+            avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
+            isAdmin: true
+          });
+        }
       });
       localStorage.setItem('zap_user', 'root');
       currentUser = 'root';
@@ -163,12 +172,14 @@ async function handleAuth() {
       } else {
         const randomNum = Math.floor(100000000 + Math.random() * 900000000);
         const autoPhone = `+55 11 9${randomNum}`;
+        const finalDisplayName = displayName || username;
 
         const newUser = {
           username: username,
+          displayName: finalDisplayName,
           passwordHash: passwordHash,
           phone: autoPhone,
-          avatar: `https://ui-avatars.com/api/?name=${username}&background=00a884&color=fff`,
+          avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(finalDisplayName)}&background=00a884&color=fff`,
           createdAt: Date.now()
         };
 
@@ -211,7 +222,6 @@ function initApp() {
     document.getElementById('rootBotAvatarSection').style.display = 'block';
   }
 
-  // Escutar alteração na foto do bot
   db.ref('bot_settings/avatar').on('value', (snap) => {
     if (snap.exists()) {
       botAvatarUrl = snap.val();
@@ -223,11 +233,13 @@ function initApp() {
   db.ref('users/' + currentUser).on('value', (snapshot) => {
     userData = snapshot.val();
     if (userData) {
-      document.getElementById('myAccountName').innerText = userData.username;
-      const avatarUrl = userData.avatar || `https://ui-avatars.com/api/?name=${userData.username}&background=00a884&color=fff`;
+      const shownName = userData.displayName || userData.username;
+      document.getElementById('myAccountName').innerText = shownName;
+      const avatarUrl = userData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shownName)}&background=00a884&color=fff`;
       document.getElementById('myHeaderAvatar').src = avatarUrl;
       document.getElementById('settingsAvatarPreview').src = avatarUrl;
       document.getElementById('settingsUsername').value = userData.username;
+      document.getElementById('settingsDisplayName').value = shownName;
       document.getElementById('settingsPhone').value = userData.phone || '';
     }
   });
@@ -236,7 +248,6 @@ function initApp() {
   openChat('geral', 'Grupo Geral', 'group', '');
 }
 
-// ROOT MUDAR FOTO DO BOT
 function changeBotAvatarByRoot(event) {
   if (currentUser !== 'root') return;
   const file = event.target.files[0];
@@ -260,18 +271,19 @@ function loadMyPrivateContacts() {
       db.ref('users/' + contactName).get().then((uSnap) => {
         if (uSnap.exists()) {
           const uData = uSnap.val();
-          const avatarUrl = uData.avatar || `https://ui-avatars.com/api/?name=${uData.username}&background=00a884&color=fff`;
+          const shownName = uData.displayName || uData.username;
+          const avatarUrl = uData.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(shownName)}&background=00a884&color=fff`;
           const deleteBtnHtml = currentUser === 'root' ? `
             <button class="delete-user-btn" title="Apagar Conta" onclick="event.stopPropagation(); deleteAccount('${uData.username}')">
               <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
             </button>` : '';
 
           container.innerHTML += `
-            <div class="contact-item contact-entry" data-name="${uData.username.toLowerCase()}" onclick="openChat('private_${getPrivateChatId(currentUser, uData.username)}', '${uData.username}', 'user', '${avatarUrl}')">
+            <div class="contact-item contact-entry" data-name="${shownName.toLowerCase()} ${uData.username.toLowerCase()}" onclick="openChat('private_${getPrivateChatId(currentUser, uData.username)}', '${shownName}', 'user', '${avatarUrl}')">
               <img class="contact-avatar-img" src="${avatarUrl}">
               <div class="contact-info">
-                <div class="name">${uData.username}</div>
-                <div class="sub">${uData.phone || 'Conversa segura'}</div>
+                <div class="name">${shownName}</div>
+                <div class="sub">@${uData.username} • ${uData.phone || ''}</div>
               </div>
               ${deleteBtnHtml}
             </div>
@@ -300,6 +312,7 @@ function wipeAllSystemData() {
     db.ref('users').remove().then(() => {
       db.ref('users/root').set({
         username: 'root',
+        displayName: 'Root Admin 👑',
         phone: '+00 00 00000-0000',
         avatar: 'https://ui-avatars.com/api/?name=Root&background=ea4335&color=fff',
         isAdmin: true
@@ -335,8 +348,10 @@ function previewProfilePhoto(event) {
 
 function saveSettings() {
   const phone = document.getElementById('settingsPhone')?.value.trim();
+  const displayName = document.getElementById('settingsDisplayName')?.value.trim();
   const updates = {};
   if (phone) updates.phone = phone;
+  if (displayName) updates.displayName = displayName;
   if (pendingAvatarBase64) updates.avatar = pendingAvatarBase64;
 
   db.ref('users/' + currentUser).update(updates).then(() => {
@@ -363,7 +378,7 @@ function addContact() {
     if (foundUsername) {
       db.ref(`my_contacts/${currentUser}/${foundUsername}`).set(true);
       db.ref(`my_contacts/${foundUsername}/${currentUser}`).set(true);
-      showNotice('addContactNotice', `Contato ${foundUsername} adicionado!`, 'success');
+      showNotice('addContactNotice', `Contato adicionado com sucesso!`, 'success');
       setTimeout(() => {
         closeModal('addContactModal');
         document.getElementById('addContactInput').value = '';
@@ -445,8 +460,10 @@ function openChat(chatId, title, avatarType, avatarUrl) {
         <path d="M15.05 0L8.7 6.35 7.4 5.05 6 6.45l2.7 2.7 8.3-8.3z"/>
       </svg>`;
 
+    const authorNameToShow = msg.authorDisplayName || msg.author;
+
     msgDiv.innerHTML = `
-      ${!isMe ? `<span class="author">${msg.author}</span>` : ''}
+      ${!isMe ? `<span class="author">${authorNameToShow}</span>` : ''}
       ${contentHtml}
       <div class="msg-footer">
         <span class="time">${timeStr}</span>
@@ -464,7 +481,6 @@ function closeChat() {
   document.getElementById('contactsPanel').classList.remove('hidden');
 }
 
-// LÓGICA DE GRAVAÇÃO DE ÁUDIO DE VOZ
 async function toggleAudioRecording() {
   const micBtn = document.getElementById('micBtn');
   const statusEl = document.getElementById('recordingStatus');
@@ -538,8 +554,11 @@ function dispatchMessage(text, imageBase64, audioBase64) {
   const chatPath = activeChatId === 'server' ? `chats_bot/${currentUser}` : `chats/${activeChatId}`;
   const chatRef = db.ref(chatPath);
 
+  const shownAuthorName = userData?.displayName || currentUser;
+
   const payload = {
     author: currentUser,
+    authorDisplayName: shownAuthorName,
     text: encryptText(text),
     timestamp: Date.now()
   };
@@ -552,6 +571,7 @@ function dispatchMessage(text, imageBase64, audioBase64) {
       setTimeout(() => {
         chatRef.push({
           author: 'Server 🤖',
+          authorDisplayName: 'Server Bot 🤖',
           text: encryptText('Pong 🏓'),
           timestamp: Date.now()
         });
